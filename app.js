@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.5";
+const APP_VERSION = "0.0.6";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -20,6 +20,7 @@ const state = {
   revealed: false,
   query: "",
   scriptText: localStorage.getItem(SCRIPT_STORAGE_KEY) || defaultScriptText(),
+  scriptMode: "reading",
   scriptIndex: 0,
   scriptRevealed: false,
   progress: loadProgress(),
@@ -180,6 +181,7 @@ function routeSnapshot() {
     studyTitle: state.studyTitle,
     customStageKeys: state.customStageKeys,
     query: state.query,
+    scriptMode: state.scriptMode,
     scriptIndex: state.scriptIndex,
   };
 }
@@ -206,6 +208,7 @@ function applyRouteSnapshot(snapshot) {
   state.studyTitle = next.studyTitle || "";
   state.customStageKeys = Array.isArray(next.customStageKeys) ? next.customStageKeys : [];
   state.query = next.query || "";
+  state.scriptMode = next.scriptMode || state.scriptMode || "reading";
   state.scriptIndex = Number(next.scriptIndex || 0);
   state.revealed = false;
   state.scriptRevealed = false;
@@ -434,31 +437,31 @@ function trackSummary(group) {
 
 function renderHome() {
   renderShell(`
-    <section class="main-library-screen">
-      <header class="main-library-header">
-        <h2>English study</h2>
+    <section class="screen-library screen-library--root">
+      <header class="library-header">
+        <h2 class="library-title">English study</h2>
       </header>
-      <div class="main-home-menu" aria-label="\uD559\uC2B5 \uBAA9\uB85D">
-        <button class="main-home-card" type="button" data-route="word">
-          <span class="main-home-card__title">\uB2E8\uC5B4</span>
-          <span class="main-home-card__meta">\uB2E8\uC5B4 \uAC80\uC0C9\uACFC \uB9DE\uCDA4 \uD559\uC2B5</span>
+      <div class="home-menu home-menu--root" aria-label="\uD559\uC2B5 \uBAA9\uB85D">
+        <button class="home-card" type="button" data-route="word">
+          <span class="home-card__title">\uB2E8\uC5B4</span>
+          <span class="home-card__meta">\uD1A0\uC775\u00B7\uD1A0\uD50C\u00B7\uBB38\uBC95\u00B7\uB9DE\uCDA4</span>
         </button>
-        <button class="main-home-card" type="button" data-group="grammar" data-route="library">
-          <span class="main-home-card__title">\uBB38\uBC95</span>
-          <span class="main-home-card__meta">\uBB38\uBC95 \uD2B8\uB799 \uCE74\uB4DC \uD559\uC2B5</span>
+        <button class="home-card" type="button" data-group="grammar" data-route="library">
+          <span class="home-card__title">\uBB38\uBC95</span>
+          <span class="home-card__meta">\uC601\uC5B4 \uBB38\uBC95 \uCE74\uB4DC \uD559\uC2B5</span>
         </button>
-        <button class="main-home-card" type="button" data-route="script">
-          <span class="main-home-card__title">\uC77D\uAE30</span>
-          <span class="main-home-card__meta">\uBB38\uC7A5 \uB2E8\uC704 \uC77D\uAE30 \uD559\uC2B5</span>
+        <button class="home-card" type="button" data-route="reading">
+          <span class="home-card__title">\uC77D\uAE30</span>
+          <span class="home-card__meta">\uBB38\uC7A5 \uB2E8\uC704 \uC77D\uAE30 \uC5F0\uC2B5</span>
         </button>
-        <button class="main-home-card" type="button" data-route="script">
-          <span class="main-home-card__title">\uB4E3\uAE30</span>
-          <span class="main-home-card__meta">\uBB38\uC7A5 TTS\uC640 \uB300\uBCF8 \uBD99\uC5EC\uB123\uAE30</span>
+        <button class="home-card" type="button" data-route="listening">
+          <span class="home-card__title">\uB4E3\uAE30</span>
+          <span class="home-card__meta">\uC74C\uC131 \uBC18\uBCF5\uACFC \uB300\uBCF8 \uD559\uC2B5</span>
         </button>
       </div>
       <div class="home-version">v ${APP_VERSION}</div>
     </section>
-  `, { home: true, simpleHome: true });
+  `, { home: true });
 }
 
 function renderWordHome() {
@@ -470,44 +473,86 @@ function renderWordHome() {
   const toeflCards = toefl.reduce((sum, track) => sum + track.items.length, 0);
 
   renderShell(`
-    <div class="study-home-shell">
-      <div class="home-nav-row">
-        <button class="home-pill" type="button" data-route="home">\uD648</button>
-        <button class="home-icon" type="button" data-route="custom" aria-label="\uD559\uC2B5 \uD604\uD669">\uD83D\uDCCA</button>
-      </div>
-
-      <div class="title-block title-block--home title-block--home-root">
-        <h2>\uB2E8\uC5B4</h2>
-      </div>
-
-      <section class="lookup-home-card">
-        <h3>\uB2E8\uC5B4 \uAC80\uC0C9</h3>
-        <p>\uC601\uC5B4\uB098 \uB73B\uC73C\uB85C \uCC3E\uC544\uBCF4\uACE0 \uBC14\uB85C \uBD81\uB9C8\uD06C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.</p>
-        <div class="lookup-inline-row">
-          <input class="input" id="home-search-input" value="${escapeHtml(state.query)}" placeholder="ex. improve / \uAC1C\uC120\uD558\uB2E4" autocomplete="off" />
-          <button class="home-utility-button" type="button" data-route="search">\uAC80\uC0C9</button>
-        </div>
-      </section>
-
-      <section class="home-category-grid" aria-label="\uB2E8\uC5B4 \uC139\uC158">
-        <button class="home-category-card" type="button" data-vocab-kind="toeic" data-route="library">
-          <span>\uD1A0\uC775</span>
-          <small>${toeic.length}\uAC1C \uD2B8\uB799 \u00B7 ${toeicCards.toLocaleString()}\uAC1C</small>
-        </button>
-        <button class="home-category-card" type="button" data-vocab-kind="toefl" data-route="library">
-          <span>\uD1A0\uD50C</span>
-          <small>${toefl.length}\uAC1C \uD2B8\uB799 \u00B7 ${toeflCards.toLocaleString()}\uAC1C</small>
-        </button>
-        <button class="home-category-card" type="button" data-group="grammar" data-route="library">
-          <span>\uBB38\uBC95</span>
-          <small>${grammar.tracks.length}\uAC1C \uD2B8\uB799</small>
-        </button>
-        <button class="home-category-card home-category-card--accent" type="button" data-route="custom">
-          <span>\uB9DE\uCDA4</span>
-          <small>\uC9C4\uD589 \u00B7 \uC120\uD0DD \u00B7 \uC800\uC7A5 ${savedCount.toLocaleString()}\uAC1C</small>
-        </button>
-      </section>
+    <div class="topbar topbar--home">
+      <button class="back-button back-button--ghost" type="button" data-route="home">\uD648</button>
+      <button class="home-icon-button" type="button" data-route="custom" aria-label="\uD559\uC2B5 \uD604\uD669">\uD83D\uDCCA</button>
     </div>
+    <div class="title-block title-block--home">
+      <h1>\uB2E8\uC5B4</h1>
+    </div>
+    <div class="home-actions">
+      <div class="home-actions-stack">
+        <div class="section-card japanese-lookup-card">
+          <div>
+            <div class="lookup-title">\uB2E8\uC5B4 \uAC80\uC0C9</div>
+            <div class="page-subtitle">\uC601\uC5B4\uB098 \uB73B\uC73C\uB85C \uCC3E\uC544\uBCF4\uACE0 \uBC14\uB85C \uBD81\uB9C8\uD06C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.</div>
+          </div>
+          <div class="lookup-search-row">
+            <input class="lookup-search-input" id="home-search-input" type="search" value="${escapeHtml(state.query)}" placeholder="ex. improve / \uAC1C\uC120\uD558\uB2E4" autocomplete="off" />
+            <button class="home-utility-button lookup-search-submit" type="button" data-route="search">\uAC80\uC0C9</button>
+          </div>
+        </div>
+        <div class="grid-2 grid-2--word-home" aria-label="\uB2E8\uC5B4 \uC139\uC158">
+          <button class="big-button" type="button" data-vocab-kind="toeic" data-route="library">
+            <div class="big-button__title">\uD1A0\uC775</div>
+            <div class="big-button__desc">${toeic.length}\uAC1C \uD2B8\uB799 \u00B7 ${toeicCards.toLocaleString()}\uAC1C</div>
+          </button>
+          <button class="big-button" type="button" data-vocab-kind="toefl" data-route="library">
+            <div class="big-button__title">\uD1A0\uD50C</div>
+            <div class="big-button__desc">${toefl.length}\uAC1C \uD2B8\uB799 \u00B7 ${toeflCards.toLocaleString()}\uAC1C</div>
+          </button>
+          <button class="big-button" type="button" data-group="grammar" data-route="library">
+            <div class="big-button__title">\uBB38\uBC95</div>
+            <div class="big-button__desc">${grammar.tracks.length}\uAC1C \uD2B8\uB799</div>
+          </button>
+          <button class="big-button big-button--accent" type="button" data-route="custom">
+            <div class="big-button__title">\uB9DE\uCDA4</div>
+            <div class="big-button__desc">\uC9C4\uD589 \u00B7 \uC120\uD0DD \u00B7 \uC800\uC7A5 ${savedCount.toLocaleString()}\uAC1C</div>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="home-version">v ${APP_VERSION}</div>
+  `, { home: true });
+}
+
+function renderSentenceMode(mode) {
+  const isListening = mode === "listening";
+  const sentences = scriptSentences();
+  const title = isListening ? "\uB4E3\uAE30" : "\uC77D\uAE30";
+  const desc = isListening
+    ? "\uC74C\uC131 \uAD6C\uAC04\uC744 \uBC18\uBCF5\uD558\uACE0 \uD544\uC694\uD560 \uB54C \uBB38\uC7A5\uC744 \uD655\uC778\uD569\uB2C8\uB2E4."
+    : "\uBB38\uC7A5\uC744 \uD558\uB098\uC529 \uB118\uAE30\uBA70 \uC758\uBBF8\uB97C \uD655\uC778\uD569\uB2C8\uB2E4.";
+  const primary = isListening ? "\uB4E3\uAE30 \uC2DC\uC791" : "\uC77D\uAE30 \uC2DC\uC791";
+  const secondary = isListening ? "\uB300\uBCF8 \uBD99\uC5EC\uB123\uAE30" : "\uAE00 \uBD99\uC5EC\uB123\uAE30";
+
+  renderShell(`
+    <section class="screen-library legacy-mode-screen">
+      <div class="library-list-header">
+        <button class="back-button back-button--ghost" type="button" data-route="home">\uD648</button>
+        <h2 class="library-list-title">${title}</h2>
+        <span></span>
+      </div>
+      <div class="library-list">
+        <section class="legacy-title-card legacy-title-card--mode">
+          <h2>${title}</h2>
+          <p>${desc}</p>
+        </section>
+        <section class="series-group">
+          <h3 class="series-group__title">${title}</h3>
+          <div class="series-group__items series-group__items--study legacy-mode-grid">
+            <button class="show-item show-item--tile show-item--study" type="button" data-route="script" data-script-mode="${mode}">
+              <span class="show-title">${primary}</span>
+              <span class="show-meta">${sentences.length}\uAC1C \uBB38\uC7A5</span>
+            </button>
+            <button class="show-item show-item--tile show-item--study" type="button" data-route="script" data-script-mode="${mode}">
+              <span class="show-title">${secondary}</span>
+              <span class="show-meta">\uC800\uC7A5\uB41C \uB300\uBCF8 \uC218\uC815</span>
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
   `, { home: true });
 }
 function renderTabs() {
@@ -518,7 +563,6 @@ function renderTabs() {
           ${groupLabel(group)}
         </button>
       `).join("")}
-      <button class="tab" type="button" aria-selected="${state.route === "script"}" data-route="script">\uBB38\uC7A5</button>
     </div>
   `;
 }
@@ -677,48 +721,48 @@ function renderSearch() {
 function renderScript() {
   const sentences = scriptSentences();
   const current = sentences[state.scriptIndex] || "";
+  const isListening = state.scriptMode === "listening";
+  const title = isListening ? "\uB4E3\uAE30" : "\uC77D\uAE30";
+  const visibleSentence = !isListening || state.scriptRevealed;
   renderShell(`
-    <section class="section-card">
-      <div class="section-head">
-        <div>
-          <div class="eyebrow">Script Study</div>
-          <h3>\uBB38\uC7A5 \uB2E8\uC704 \uD559\uC2B5</h3>
-        </div>
-        <div class="toolbar">
-          <button class="btn" type="button" data-action="script-save">\uC800\uC7A5</button>
-          <button class="btn primary" type="button" data-action="script-speak">\uD604\uC7AC \uBB38\uC7A5 \uB4E3\uAE30</button>
-        </div>
+    <section class="screen-library ${isListening ? "listening-stage" : "reading-stage"}">
+      <div class="library-list-header">
+        <button class="back-button back-button--ghost" type="button" data-route="${isListening ? "listening" : "reading"}">\u2190 ${title}</button>
+        <h2 class="library-list-title">${title}</h2>
+        <button class="home-utility-button" type="button" data-action="script-save">\uC800\uC7A5</button>
       </div>
-      <div class="script-grid">
-        <div>
+      <div class="library-list library-list--script-study">
+        <section class="section-card script-editor-card">
           <textarea class="textarea" id="script-text" spellcheck="false">${escapeHtml(state.scriptText)}</textarea>
           <div class="card-actions">
-            <button class="btn" type="button" data-action="script-prev">\uC774\uC804</button>
-            <button class="btn" type="button" data-action="script-next">\uB2E4\uC74C</button>
             <button class="btn accent" type="button" data-action="script-reset">\uC608\uBB38\uC73C\uB85C \uCD08\uAE30\uD654</button>
           </div>
-        </div>
-        <div class="study-panel">
+        </section>
+        <section class="section-card ${isListening ? "listening-panel" : "reading-panel"} ${visibleSentence ? "is-revealed" : ""}">
           <div class="card-main">
             <div class="eyebrow">${Math.min(state.scriptIndex + 1, sentences.length || 1)} / ${sentences.length || 0}</div>
             ${current ? `
-              <div class="prompt">${state.scriptRevealed ? escapeHtml(current) : "Listen first"}</div>
-              ${state.scriptRevealed ? `<p class="example">${escapeHtml(current)}</p>` : `<button class="btn primary" type="button" data-action="script-reveal">\uBB38\uC7A5 \uBCF4\uAE30</button>`}
+              <div class="prompt ${isListening ? "listening-sentence" : "reading-sentence"}">${visibleSentence ? escapeHtml(current) : "Listen first"}</div>
+              ${visibleSentence ? `<p class="example reading-extra">${escapeHtml(current)}</p>` : `<button class="btn primary" type="button" data-action="script-reveal">\uBB38\uC7A5 \uBCF4\uAE30</button>`}
             ` : `<div class="empty">\uC601\uC5B4 \uBB38\uC7A5\uC744 \uBD99\uC5EC\uB123\uC73C\uBA74 \uC790\uB3D9\uC73C\uB85C \uBB38\uC7A5 \uCE74\uB4DC\uAC00 \uB9CC\uB4E4\uC5B4\uC9D1\uB2C8\uB2E4.</div>`}
           </div>
-          <div class="sentence-list">
-            ${sentences.map((sentence, index) => `
-              <button class="sentence-row ${index === state.scriptIndex ? "active" : ""}" type="button" data-script-index="${index}">
-                ${escapeHtml(sentence)}
-              </button>
-            `).join("")}
+          <div class="card-actions reading-actions">
+            <button class="btn" type="button" data-action="script-prev">\uC774\uC804</button>
+            <button class="btn primary" type="button" data-action="script-speak">${isListening ? "\uD604\uC7AC \uBB38\uC7A5 \uB4E3\uAE30" : "\uBC1C\uC74C"}</button>
+            <button class="btn" type="button" data-action="script-next">\uB2E4\uC74C</button>
           </div>
-        </div>
+        </section>
+        <section class="sentence-list sentence-list--legacy">
+          ${sentences.map((sentence, index) => `
+            <button class="sentence-row ${index === state.scriptIndex ? "active" : ""}" type="button" data-script-index="${index}">
+              ${escapeHtml(sentence)}
+            </button>
+          `).join("")}
+        </section>
       </div>
     </section>
-  `);
+  `, { home: true });
 }
-
 function renderCustomMenu() {
   const savedCount = savedQueueEntries().length;
   renderShell(`
@@ -797,6 +841,8 @@ function render() {
   if (state.route === "library") return renderLibrary();
   if (state.route === "study") return renderStudy();
   if (state.route === "search") return renderSearch();
+  if (state.route === "reading") return renderSentenceMode("reading");
+  if (state.route === "listening") return renderSentenceMode("listening");
   if (state.route === "script") return renderScript();
   if (state.route === "custom") return renderCustomMenu();
   if (state.route === "custom-select") return renderCustomSelect();
@@ -810,6 +856,7 @@ function bindEvents() {
     if (target.dataset.vocabKind) state.group = target.dataset.vocabKind;
     if (target.dataset.group) state.group = target.dataset.group;
     if (target.dataset.route) {
+      if (target.dataset.scriptMode) state.scriptMode = target.dataset.scriptMode;
       setRoute(target.dataset.route);
       return;
     }
