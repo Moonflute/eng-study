@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.2";
+const APP_VERSION = "0.0.3";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -160,10 +160,63 @@ function speak(text, rate = 0.86) {
   window.speechSynthesis.speak(utterance);
 }
 
-function setRoute(route) {
+function routeSnapshot() {
+  return {
+    app: "english-study-lab",
+    route: state.route,
+    group: state.group,
+    trackId: state.trackId,
+    stageIndex: state.stageIndex,
+    cardIndex: state.cardIndex,
+    studyQueue: state.studyQueue,
+    queueIndex: state.queueIndex,
+    studyTitle: state.studyTitle,
+    customStageKeys: state.customStageKeys,
+    query: state.query,
+    scriptIndex: state.scriptIndex,
+  };
+}
+
+function routeHash(route = state.route) {
+  return `#${route || "home"}`;
+}
+
+function syncHistory(replace = false) {
+  if (!("history" in window)) return;
+  const method = replace ? "replaceState" : "pushState";
+  window.history[method](routeSnapshot(), "", routeHash());
+}
+
+function applyRouteSnapshot(snapshot) {
+  const next = snapshot?.app === "english-study-lab" ? snapshot : { route: "home" };
+  state.route = next.route || "home";
+  state.group = next.group || "all";
+  state.trackId = next.trackId || state.trackId;
+  state.stageIndex = Number(next.stageIndex || 0);
+  state.cardIndex = Number(next.cardIndex || 0);
+  state.studyQueue = Array.isArray(next.studyQueue) ? next.studyQueue : null;
+  state.queueIndex = Number(next.queueIndex || 0);
+  state.studyTitle = next.studyTitle || "";
+  state.customStageKeys = Array.isArray(next.customStageKeys) ? next.customStageKeys : [];
+  state.query = next.query || "";
+  state.scriptIndex = Number(next.scriptIndex || 0);
+  state.revealed = false;
+  state.scriptRevealed = false;
+  render();
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+
+function initHistory() {
+  if (!("history" in window)) return;
+  syncHistory(true);
+  window.addEventListener("popstate", (event) => applyRouteSnapshot(event.state));
+}
+
+function setRoute(route, options = {}) {
   state.route = route;
   state.revealed = false;
   state.scriptRevealed = false;
+  if (!options.skipHistory) syncHistory(Boolean(options.replace));
   render();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -755,12 +808,14 @@ function bindEvents() {
   document.addEventListener("click", (event) => {
     const target = event.target.closest("button, [data-action='home']");
     if (!target) return;
-
-    if (target.dataset.route) setRoute(target.dataset.route);
-    if (target.dataset.action === "home") setRoute("home");
-    if (target.dataset.group) {
-      state.group = target.dataset.group;
-      render();
+    if (target.dataset.group) state.group = target.dataset.group;
+    if (target.dataset.route) {
+      setRoute(target.dataset.route);
+      return;
+    }
+    if (target.dataset.action === "home") {
+      setRoute("home");
+      return;
     }
     if (target.dataset.trackId) selectTrack(target.dataset.trackId);
     if (target.dataset.stageIndex) selectStage(Number(target.dataset.stageIndex));
@@ -854,6 +909,7 @@ function registerServiceWorker() {
 }
 
 bindEvents();
+initHistory();
 render();
 loadData();
 registerServiceWorker();
