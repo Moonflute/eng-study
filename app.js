@@ -1,6 +1,6 @@
-const APP_VERSION = "1.0.0";
-const STORAGE_KEY = "english-study-lab-progress-v1";
-const SCRIPT_STORAGE_KEY = "english-study-lab-script-v1";
+const APP_VERSION = "0.0.0";
+const STORAGE_KEY = "english-study-lab-progress-v0";
+const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
 
 const app = document.querySelector("#app");
@@ -632,7 +632,7 @@ async function loadData() {
       .map((track) => ({ ...track, groupKey: normalizeGroup(track.group) }));
     state.trackId = state.tracks[0]?.id || "";
   } catch (error) {
-    state.error = `?怨몃선 ?怨쀬뵠??嚥≪뮆諭???쎈솭: ${error.message}`;
+    state.error = `\uC601\uC5B4 \uB370\uC774\uD130 \uB85C\uB4DC \uC2E4\uD328: ${error.message}`;
   }
   render();
 }
