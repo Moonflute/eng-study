@@ -1542,3 +1542,127 @@ button {
     font-size: 16px;
   }
 }
+/* Compact word home: fixed phone viewport, no graph button, 2x2 categories */
+.page--home:has(.word-home-compact) {
+  width: min(620px, 100%);
+  padding: 10px 20px 12px;
+  overflow: hidden;
+}
+
+.word-home-compact {
+  width: min(560px, 100%);
+  min-height: calc(100dvh - 22px);
+  margin-inline: auto;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.word-home-compact .topbar--home {
+  padding: 0;
+  min-height: 44px;
+  align-items: center;
+}
+
+.word-home-compact .back-button {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+}
+
+.word-home-compact .title-block {
+  margin: 0;
+  padding: 0;
+}
+
+.word-home-compact .title-block h1 {
+  margin: 0;
+  font-size: clamp(32px, 8vw, 44px);
+}
+
+.word-home-compact .home-actions {
+  margin: 0;
+  min-height: 0;
+}
+
+.word-home-compact .home-actions-stack {
+  gap: 10px;
+}
+
+.word-home-compact .japanese-lookup-card {
+  margin-top: 0;
+  padding: 14px 16px;
+  border-radius: 22px;
+  gap: 8px;
+}
+
+.word-home-compact .lookup-title {
+  font-size: 19px;
+}
+
+.word-home-compact .page-subtitle {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.word-home-compact .lookup-search-row {
+  gap: 8px;
+}
+
+.word-home-compact .lookup-search-input {
+  min-height: 44px;
+  border-radius: 16px;
+  padding: 0 12px;
+}
+
+.word-home-compact .lookup-search-submit {
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.grid-2--word-home {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+.word-home-compact .grid-2--word-home .big-button {
+  height: clamp(108px, 20dvh, 132px);
+  min-height: 0;
+  padding: 12px 10px;
+  border-radius: 20px;
+}
+
+.word-home-compact .grid-2--word-home .big-button__title {
+  font-size: clamp(26px, 7vw, 34px);
+}
+
+.word-home-compact .grid-2--word-home .big-button__desc {
+  font-size: clamp(12px, 3.1vw, 14px);
+  line-height: 1.25;
+}
+
+.word-home-compact .home-version {
+  margin-top: 2px;
+  padding: 7px 14px;
+}
+
+@media (max-width: 380px) {
+  .page--home:has(.word-home-compact) {
+    padding-inline: 14px;
+  }
+
+  .word-home-compact .japanese-lookup-card {
+    padding: 12px 14px;
+  }
+
+  .word-home-compact .grid-2--word-home .big-button {
+    height: 104px;
+  }
+}

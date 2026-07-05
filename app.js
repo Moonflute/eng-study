@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.9";
+const APP_VERSION = "0.0.10";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -506,9 +506,9 @@ function renderWordHome() {
   const toeflCards = toefl.reduce((sum, track) => sum + track.items.length, 0);
 
   renderShell(`
+    <div class="word-home-compact">
     <div class="topbar topbar--home">
       <button class="back-button back-button--ghost" type="button" data-route="home">\uD648</button>
-      <button class="home-icon-button" type="button" data-route="custom" aria-label="\uD559\uC2B5 \uD604\uD669">\uD83D\uDCCA</button>
     </div>
     <div class="title-block title-block--home">
       <h1>\uB2E8\uC5B4</h1>
@@ -546,6 +546,7 @@ function renderWordHome() {
       </div>
     </div>
     <div class="home-version">v ${APP_VERSION}</div>
+      </div>
   `, { home: true });
 }
 
