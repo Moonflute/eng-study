@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.15";
+const APP_VERSION = "0.0.16";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -17,6 +17,7 @@ const state = {
   queueIndex: 0,
   studyTitle: "",
   customStageKeys: [],
+  customBatchSize: 20,
   revealed: false,
   query: "",
   scriptText: localStorage.getItem(SCRIPT_STORAGE_KEY) || defaultScriptText(),
@@ -182,6 +183,7 @@ function routeSnapshot() {
     queueIndex: state.queueIndex,
     studyTitle: state.studyTitle,
     customStageKeys: state.customStageKeys,
+    customBatchSize: state.customBatchSize,
     query: state.query,
     scriptMode: state.scriptMode,
     scriptIndex: state.scriptIndex,
@@ -210,6 +212,7 @@ function applyRouteSnapshot(snapshot) {
   state.queueIndex = Number(next.queueIndex || 0);
   state.studyTitle = next.studyTitle || "";
   state.customStageKeys = Array.isArray(next.customStageKeys) ? next.customStageKeys : [];
+  state.customBatchSize = Number(next.customBatchSize || state.customBatchSize || 20);
   state.query = next.query || "";
   state.scriptMode = next.scriptMode || state.scriptMode || "reading";
   state.scriptIndex = Number(next.scriptIndex || 0);
@@ -438,7 +441,8 @@ function toggleCustomStage(key) {
 function startSelectedStudy() {
   const selected = new Set(state.customStageKeys);
   const options = allStageOptions().filter((option) => selected.has(option.key));
-  startQueue(queueFromStageOptions(options), "\uC120\uD0DD");
+  const entries = queueFromStageOptions(options).slice(0, Math.max(1, state.customBatchSize || 20));
+  startQueue(entries, "\uC120\uD0DD");
 }
 
 function clearSavedItems() {
@@ -1002,7 +1006,8 @@ function renderCustomSelect() {
         </div>
         <div class="custom-select-controls">
           <button class="stage-preview-filter" type="button" data-action="custom-clear" ${selected.size ? "" : "disabled"}>\uD574\uC81C</button>
-          <button class="stage-preview-filter is-active" type="button">20\uAC1C</button>
+          <button class="stage-preview-filter${state.customBatchSize === 7 ? " is-active" : ""}" type="button" data-custom-batch="7">7\uAC1C</button>
+          <button class="stage-preview-filter${state.customBatchSize === 20 ? " is-active" : ""}" type="button" data-custom-batch="20">20\uAC1C</button>
           <button class="stage-preview-filter" type="button">v \uD3EC\uD568</button>
           <button class="big-button big-button--accent custom-select-start" type="button" data-action="custom-selected" ${selected.size ? "" : "disabled"}>
             <div class="big-button__title">\uC2DC\uC791</div>
@@ -1140,6 +1145,10 @@ function bindEvents() {
     }
     if (action === "custom-clear") {
       state.customStageKeys = [];
+      render();
+    }
+    if (target.dataset.customBatch) {
+      state.customBatchSize = Number(target.dataset.customBatch) || 20;
       render();
     }
     if (action === "custom-progress") startProgressStudy();
