@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.12";
+const APP_VERSION = "0.0.13";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -26,6 +26,7 @@ const state = {
   progress: loadProgress(),
   error: "",
   gamepadButtons: {},
+  progressOpen: false,
 };
 
 function defaultScriptText() {
@@ -184,6 +185,7 @@ function routeSnapshot() {
     query: state.query,
     scriptMode: state.scriptMode,
     scriptIndex: state.scriptIndex,
+    progressOpen: state.progressOpen,
   };
 }
 
@@ -211,6 +213,7 @@ function applyRouteSnapshot(snapshot) {
   state.query = next.query || "";
   state.scriptMode = next.scriptMode || state.scriptMode || "reading";
   state.scriptIndex = Number(next.scriptIndex || 0);
+  state.progressOpen = Boolean(next.progressOpen);
   state.revealed = false;
   state.scriptRevealed = false;
   render();
@@ -360,7 +363,7 @@ function searchResults() {
 }
 
 function wordTracks() {
-  return state.tracks.filter((track) => normalizeGroup(track.group) === "word");
+  return state.tracks.filter((track) => ["word", "grammar"].includes(normalizeGroup(track.group)) || vocabKind(track) === "toeic" || vocabKind(track) === "toefl");
 }
 
 function stageKey(trackId, stageIndex) {
@@ -509,6 +512,7 @@ function renderWordHome() {
     <div class="word-home-compact">
     <div class="topbar topbar--home">
       <button class="back-button back-button--ghost" type="button" data-route="home">\uD648</button>
+      <button class="home-icon-button" type="button" data-action="progress-open" aria-label="\uC9C4\uD589\uB960 \uBCF4\uAE30">\uD83D\uDCCA</button>
     </div>
     <div class="title-block title-block--home">
       <h1>\uB2E8\uC5B4</h1>
@@ -588,6 +592,80 @@ function renderSentenceMode(mode) {
       </div>
     </section>
   `, { home: true });
+}
+function progressGroups() {
+  const groups = new Map();
+  for (const track of wordTracks()) {
+    const kind = normalizeGroup(track.group) === "grammar" ? "grammar" : vocabKind(track);
+    const title = groupLabel(kind === "word" ? "word" : kind);
+    if (!groups.has(title)) groups.set(title, []);
+    groups.get(title).push(track);
+  }
+  return [...groups.entries()].map(([title, tracks]) => ({ title, tracks }));
+}
+
+function completedStageCount(track) {
+  return (track.stages || []).filter((stage) => isStageComplete(track, stage)).length;
+}
+
+function renderProgressCells(track) {
+  return (track.stages || []).map((stage) => {
+    const complete = isStageComplete(track, stage);
+    const review = stageReviewCount(track, stage) > 0;
+    return `<span class="progress-cell${complete ? " is-complete" : review ? " is-active" : ""}"></span>`;
+  }).join("");
+}
+
+function renderProgressModal() {
+  return `
+    <div class="modal-backdrop progress-backdrop">
+      <div class="modal-panel section-card progress-modal">
+        <div class="progress-modal__head">
+          <div>
+            <div class="progress-modal__title">\uC9C4\uD589\uB960</div>
+            <div class="progress-modal__subtitle">\uAC01 \uD30C\uD2B8\uBCC4 \uC54C\uACE0\uC788\uC74C \uAE30\uC900 \uC9C4\uD589\uB960</div>
+          </div>
+          <button class="stage-preview-close" type="button" data-action="progress-close" aria-label="\uC9C4\uD589\uB960 \uB2EB\uAE30">\u00D7</button>
+        </div>
+        <div class="progress-groups">
+          ${progressGroups().map((group) => `
+            <section class="progress-group">
+              <h3>${escapeHtml(group.title)}</h3>
+              ${group.tracks.map((track) => {
+                const progress = ensureTrackProgress(track.id);
+                return `
+                  <div class="progress-track">
+                    <div class="progress-track__head">
+                      <strong>${escapeHtml(track.title)}</strong>
+                      <span>${completedStageCount(track)}/${track.stages.length} \uBB49\uCE58 \uC644\uB8CC \u00B7 ${(progress.known || []).length}/${track.total}</span>
+                    </div>
+                    <div class="progress-cells">${renderProgressCells(track)}</div>
+                  </div>
+                `;
+              }).join("")}
+            </section>
+          `).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function customSelectGroups() {
+  const grouped = new Map();
+  for (const option of allStageOptions()) {
+    const kind = normalizeGroup(option.track.group) === "grammar" ? "grammar" : vocabKind(option.track);
+    const groupTitle = groupLabel(kind === "word" ? "word" : kind);
+    if (!grouped.has(groupTitle)) grouped.set(groupTitle, new Map());
+    const tracks = grouped.get(groupTitle);
+    const trackTitle = option.track.title;
+    if (!tracks.has(trackTitle)) tracks.set(trackTitle, []);
+    tracks.get(trackTitle).push(option);
+  }
+  return [...grouped.entries()].map(([groupTitle, tracks]) => ({
+    groupTitle,
+    tracks: [...tracks.entries()].map(([trackTitle, options]) => ({ trackTitle, options })),
+  }));
 }
 function renderTabs() {
   return `
@@ -879,35 +957,61 @@ function renderCustomMenu() {
 }
 
 function renderCustomSelect() {
-  const options = allStageOptions();
+  const groups = customSelectGroups();
   const selected = new Set(state.customStageKeys);
+  const selectedOptions = allStageOptions().filter((option) => selected.has(option.key));
+  const selectedCards = selectedOptions.reduce((sum, option) => sum + option.total, 0);
   renderShell(`
-    <div class="legacy-screen">
-      <div class="home-nav-row">
-        <button class="home-pill" type="button" data-route="custom">\u2190 \uB9DE\uCDA4</button>
+    <div class="legacy-screen custom-select-screen">
+      <div class="home-nav-row custom-select-nav">
+        <button class="home-pill" type="button" data-route="custom">\uD648</button>
       </div>
-      <section class="legacy-title-card">
+      <section class="legacy-title-card custom-select-title-card">
         <h2>\uC120\uD0DD</h2>
-        <p>\uD559\uC2B5\uD560 \uB2E8\uC5B4 \uBB49\uCE58\uB97C \uACE0\uB985\uB2C8\uB2E4.</p>
+        <p>\uB2E8\uC77C\uC744 \uACE0\uB974\uACE0 \uD55C \uBC88\uC5D0 \uD559\uC2B5\uC744 \uC2DC\uC791\uD569\uB2C8\uB2E4.</p>
       </section>
-      <section class="section-card custom-select-panel">
-        ${options.map((option) => `
-          <button class="stage-button stage-button--day ${selected.has(option.key) ? "is-active" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
-            <div class="stage-button__main">
-              <div class="stage-button__title">${escapeHtml(option.track.title)} \u00B7 ${escapeHtml(option.stage.label || `Stage ${option.index + 1}`)}</div>
-              <div class="stage-button__meta">${option.total}\uAC1C \u00B7 ${option.percent}% \uC644\uB8CC</div>
-            </div>
-          </button>
+      <section class="section-card custom-select-board">
+        ${groups.map((group) => `
+          <section class="custom-select-group">
+            <h3 class="custom-select-group__title">${escapeHtml(group.groupTitle)}</h3>
+            ${group.tracks.map((track) => {
+              const selectedCount = track.options.filter((option) => selected.has(option.key)).length;
+              return `
+                <div class="custom-select-track">
+                  <div class="custom-select-track__head">
+                    <h4>${escapeHtml(track.trackTitle)}</h4>
+                    <span>${selectedCount}/${track.options.length}</span>
+                  </div>
+                  <div class="custom-stage-chip-grid">
+                    ${track.options.map((option, index) => `
+                      <button class="custom-stage-chip${selected.has(option.key) ? " is-active" : ""}${option.percent >= 100 ? " is-complete" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
+                        ${String(index + 1).padStart(2, "0")}
+                      </button>
+                    `).join("")}
+                  </div>
+                </div>
+              `;
+            }).join("")}
+          </section>
         `).join("")}
       </section>
-      <button class="big-button big-button--accent big-button--single custom-start-button" type="button" data-action="custom-selected" ${selected.size ? "" : "disabled"}>
-        <div class="big-button__title">\uC2DC\uC791</div>
-        <div class="big-button__desc">${selected.size}\uAC1C \uBB49\uCE58 \uD559\uC2B5</div>
-      </button>
+      <section class="section-card custom-select-footer">
+        <div class="custom-select-summary">
+          <span>\uC120\uD0DD\uD55C \uBB49\uCE58 ${selected.size}\uAC1C</span>
+          <span>\uC120\uD0DD\uD55C \uCE74\uB4DC ${selectedCards}\uAC1C</span>
+        </div>
+        <div class="custom-select-controls">
+          <button class="stage-preview-filter" type="button" data-action="custom-clear" ${selected.size ? "" : "disabled"}>\uD574\uC81C</button>
+          <button class="stage-preview-filter is-active" type="button">20\uAC1C</button>
+          <button class="stage-preview-filter" type="button">v \uD3EC\uD568</button>
+          <button class="big-button big-button--accent custom-select-start" type="button" data-action="custom-selected" ${selected.size ? "" : "disabled"}>
+            <div class="big-button__title">\uC2DC\uC791</div>
+          </button>
+        </div>
+      </section>
     </div>
   `, { home: true });
-}
-function renderLoading() {
+}function renderLoading() {
   renderShell(`<div class="empty">\uC601\uC5B4 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.</div>`);
 }
 
@@ -1026,6 +1130,18 @@ function bindEvents() {
     if (target.dataset.speakText) speak(target.dataset.speakText);
 
     const action = target.dataset.action;
+    if (action === "progress-open") {
+      state.progressOpen = true;
+      render();
+    }
+    if (action === "progress-close") {
+      state.progressOpen = false;
+      render();
+    }
+    if (action === "custom-clear") {
+      state.customStageKeys = [];
+      render();
+    }
     if (action === "custom-progress") startProgressStudy();
     if (action === "custom-saved") startSavedStudy();
     if (action === "custom-selected") startSelectedStudy();
