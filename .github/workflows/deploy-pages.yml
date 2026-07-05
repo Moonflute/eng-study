@@ -8,9 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages-${{ github.ref }}
@@ -18,19 +16,13 @@ concurrency:
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v6
-
-      - name: Build static artifact
+      - name: Build static site
         shell: bash
         run: |
           rm -rf _site
@@ -38,11 +30,10 @@ jobs:
           cp index.html app.js styles.css manifest.webmanifest sw.js .nojekyll _site/
           cp -R data icons _site/
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
+      - name: Publish gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: _site
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          publish_branch: gh-pages
+          force_orphan: true
