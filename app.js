@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.3";
+const APP_VERSION = "0.0.4";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -82,7 +82,7 @@ function normalizeGroup(group) {
 }
 
 function groupLabel(group) {
-  return { all: "\uC804\uCCB4", word: "\uB2E8\uC5B4", grammar: "\uBB38\uBC95", script: "\uBB38\uC7A5" }[group] || group;
+  return { all: "\uC804\uCCB4", word: "\uB2E8\uC5B4", toeic: "\uD1A0\uC775", toefl: "\uD1A0\uD50C", grammar: "\uBB38\uBC95", script: "\uBB38\uC7A5" }[group] || group;
 }
 
 function findTrack(trackId) {
@@ -99,6 +99,13 @@ function currentQueueEntry() {
   return Array.isArray(state.studyQueue) ? state.studyQueue[state.queueIndex] || null : null;
 }
 
+
+function vocabKind(track) {
+  const text = `${track.id} ${track.title}`.toLowerCase();
+  if (text.includes("toeic") || text.includes("yellow")) return "toeic";
+  if (text.includes("toef") || text.includes("green")) return "toefl";
+  return "word";
+}
 function currentTrack() {
   const entry = currentQueueEntry();
   if (entry) return findTrack(entry.trackId) || state.tracks[0] || null;
@@ -461,10 +468,12 @@ function renderHome() {
 }
 
 function renderWordHome() {
-  const word = trackSummary("word");
+  const toeic = state.tracks.filter((track) => vocabKind(track) === "toeic");
+  const toefl = state.tracks.filter((track) => vocabKind(track) === "toefl");
   const grammar = trackSummary("grammar");
-  const scriptCount = scriptSentences().length;
   const savedCount = savedQueueEntries().length;
+  const toeicCards = toeic.reduce((sum, track) => sum + track.items.length, 0);
+  const toeflCards = toefl.reduce((sum, track) => sum + track.items.length, 0);
 
   renderShell(`
     <div class="study-home-shell">
@@ -474,7 +483,7 @@ function renderWordHome() {
       </div>
 
       <div class="title-block title-block--home title-block--home-root">
-        <h2>\uC601\uC5B4</h2>
+        <h2>\uB2E8\uC5B4</h2>
       </div>
 
       <section class="lookup-home-card">
@@ -486,22 +495,18 @@ function renderWordHome() {
         </div>
       </section>
 
-      <section class="home-category-grid" aria-label="\uD559\uC2B5 \uC720\uD615">
-        <button class="home-category-card" type="button" data-group="word" data-route="library">
-          <span>\uB2E8\uC5B4</span>
-          <small>${word.tracks.length}\uAC1C \uD2B8\uB799 \u00B7 ${word.cards.toLocaleString()}\uAC1C</small>
+      <section class="home-category-grid" aria-label="\uB2E8\uC5B4 \uC139\uC158">
+        <button class="home-category-card" type="button" data-vocab-kind="toeic" data-route="library">
+          <span>\uD1A0\uC775</span>
+          <small>${toeic.length}\uAC1C \uD2B8\uB799 \u00B7 ${toeicCards.toLocaleString()}\uAC1C</small>
+        </button>
+        <button class="home-category-card" type="button" data-vocab-kind="toefl" data-route="library">
+          <span>\uD1A0\uD50C</span>
+          <small>${toefl.length}\uAC1C \uD2B8\uB799 \u00B7 ${toeflCards.toLocaleString()}\uAC1C</small>
         </button>
         <button class="home-category-card" type="button" data-group="grammar" data-route="library">
           <span>\uBB38\uBC95</span>
           <small>${grammar.tracks.length}\uAC1C \uD2B8\uB799</small>
-        </button>
-        <button class="home-category-card" type="button" data-route="script">
-          <span>\uC77D\uAE30</span>
-          <small>${scriptCount}\uBB38\uC7A5 \uBC18\uBCF5</small>
-        </button>
-        <button class="home-category-card" type="button" data-route="script">
-          <span>\uB4E3\uAE30</span>
-          <small>TTS \uC7AC\uC0DD · \uB300\uBCF8 \uBD99\uC5EC\uB123\uAE30</small>
         </button>
         <button class="home-category-card home-category-card--accent" type="button" data-route="custom">
           <span>\uB9DE\uCDA4</span>
@@ -514,7 +519,7 @@ function renderWordHome() {
 function renderTabs() {
   return `
     <div class="tabs" role="tablist" aria-label="\uD559\uC2B5 \uC885\uB958">
-      ${["all", "word", "grammar"].map((group) => `
+      ${["all", "toeic", "toefl", "grammar"].map((group) => `
         <button class="tab" type="button" aria-selected="${state.group === group}" data-group="${group}">
           ${groupLabel(group)}
         </button>
@@ -526,7 +531,7 @@ function renderTabs() {
 
 function renderLibrarySection(group = state.group, limit = Infinity) {
   const tracks = state.tracks
-    .filter((track) => group === "all" || normalizeGroup(track.group) === group)
+     .filter((track) => group === "all" || (group === "toeic" ? vocabKind(track) === "toeic" : group === "toefl" ? vocabKind(track) === "toefl" : normalizeGroup(track.group) === group))
     .slice(0, limit);
 
   return `
@@ -808,6 +813,7 @@ function bindEvents() {
   document.addEventListener("click", (event) => {
     const target = event.target.closest("button, [data-action='home']");
     if (!target) return;
+    if (target.dataset.vocabKind) state.group = target.dataset.vocabKind;
     if (target.dataset.group) state.group = target.dataset.group;
     if (target.dataset.route) {
       setRoute(target.dataset.route);
