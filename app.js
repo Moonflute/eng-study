@@ -13,6 +13,10 @@ const state = {
   trackId: "",
   stageIndex: 0,
   cardIndex: 0,
+  studyQueue: null,
+  queueIndex: 0,
+  studyTitle: "",
+  customStageKeys: [],
   revealed: false,
   query: "",
   scriptText: localStorage.getItem(SCRIPT_STORAGE_KEY) || defaultScriptText(),
@@ -81,7 +85,23 @@ function groupLabel(group) {
   return { all: "\uC804\uCCB4", word: "\uB2E8\uC5B4", grammar: "\uBB38\uBC95", script: "\uBB38\uC7A5" }[group] || group;
 }
 
+function findTrack(trackId) {
+  return state.tracks.find((track) => track.id === trackId) || null;
+}
+
+function findItem(trackId, itemId) {
+  const track = findTrack(trackId);
+  if (!track) return null;
+  return track.items.find((item) => item.id === itemId) || null;
+}
+
+function currentQueueEntry() {
+  return Array.isArray(state.studyQueue) ? state.studyQueue[state.queueIndex] || null : null;
+}
+
 function currentTrack() {
+  const entry = currentQueueEntry();
+  if (entry) return findTrack(entry.trackId) || state.tracks[0] || null;
   return state.tracks.find((track) => track.id === state.trackId) || state.tracks[0] || null;
 }
 
@@ -91,12 +111,17 @@ function currentStage(track = currentTrack()) {
 }
 
 function currentItems(track = currentTrack(), stage = currentStage(track)) {
+  if (Array.isArray(state.studyQueue)) {
+    return state.studyQueue.map((entry) => findItem(entry.trackId, entry.itemId)).filter(Boolean);
+  }
   if (!track) return [];
   if (!stage) return track.items;
   return track.items.slice(stage.start, stage.end);
 }
 
 function currentItem() {
+  const entry = currentQueueEntry();
+  if (entry) return findItem(entry.trackId, entry.itemId);
   const items = currentItems();
   return items[state.cardIndex] || null;
 }
@@ -144,6 +169,9 @@ function setRoute(route) {
 }
 
 function selectTrack(trackId) {
+  state.studyQueue = null;
+  state.queueIndex = 0;
+  state.studyTitle = "";
   state.trackId = trackId;
   const progress = ensureTrackProgress(trackId);
   state.stageIndex = progress.lastStage || 0;
@@ -164,6 +192,12 @@ function selectStage(index) {
 }
 
 function moveCard(delta) {
+  if (Array.isArray(state.studyQueue)) {
+    state.queueIndex = Math.min(Math.max(0, state.queueIndex + delta), Math.max(0, state.studyQueue.length - 1));
+    state.revealed = false;
+    render();
+    return;
+  }
   const items = currentItems();
   state.cardIndex = Math.min(Math.max(0, state.cardIndex + delta), Math.max(0, items.length - 1));
   state.revealed = false;
@@ -229,6 +263,90 @@ function searchResults() {
   return results;
 }
 
+function wordTracks() {
+  return state.tracks.filter((track) => normalizeGroup(track.group) === "word");
+}
+
+function stageKey(trackId, stageIndex) {
+  return `${trackId}::${stageIndex}`;
+}
+
+function allStageOptions() {
+  return wordTracks().flatMap((track) =>
+    track.stages.map((stage, index) => {
+      const items = track.items.slice(stage.start, stage.end);
+      const progress = ensureTrackProgress(track.id);
+      const known = new Set(progress.known);
+      const checked = new Set(progress.checked);
+      const done = items.filter((item) => known.has(item.id) || checked.has(item.id)).length;
+      return {
+        key: stageKey(track.id, index),
+        track,
+        stage,
+        index,
+        items,
+        done,
+        total: items.length,
+        percent: Math.round((done / Math.max(1, items.length)) * 100),
+      };
+    }),
+  );
+}
+
+function savedQueueEntries() {
+  const entries = [];
+  for (const track of state.tracks) {
+    const progress = ensureTrackProgress(track.id);
+    for (const itemId of progress.saved) entries.push({ trackId: track.id, itemId });
+  }
+  return entries.filter((entry) => findItem(entry.trackId, entry.itemId));
+}
+
+function queueFromStageOptions(options) {
+  return options.flatMap((option) => option.items.map((item) => ({ trackId: option.track.id, itemId: item.id })));
+}
+
+function startQueue(entries, title) {
+  if (!entries.length) return;
+  state.studyQueue = entries;
+  state.queueIndex = 0;
+  state.cardIndex = 0;
+  state.studyTitle = title;
+  state.revealed = false;
+  setRoute("study");
+}
+
+function startProgressStudy() {
+  const options = allStageOptions()
+    .filter((option) => option.total > 0)
+    .sort((a, b) => a.percent - b.percent || b.total - a.total)
+    .slice(0, 4);
+  startQueue(queueFromStageOptions(options), "\uC9C4\uD589");
+}
+
+function startSavedStudy() {
+  startQueue(savedQueueEntries(), "\uC800\uC7A5");
+}
+
+function toggleCustomStage(key) {
+  const selected = new Set(state.customStageKeys);
+  if (selected.has(key)) selected.delete(key);
+  else selected.add(key);
+  state.customStageKeys = [...selected];
+  render();
+}
+
+function startSelectedStudy() {
+  const selected = new Set(state.customStageKeys);
+  const options = allStageOptions().filter((option) => selected.has(option.key));
+  startQueue(queueFromStageOptions(options), "\uC120\uD0DD");
+}
+
+function clearSavedItems() {
+  for (const track of state.tracks) ensureTrackProgress(track.id).saved = [];
+  saveProgress();
+  render();
+}
 function renderShell(content, options = {}) {
   const homeClass = options.home ? " topbar--home" : "";
   app.innerHTML = `
@@ -259,73 +377,84 @@ function trackSummary(group) {
 }
 
 function renderHome() {
-  const stats = appStats();
   const word = trackSummary("word");
   const grammar = trackSummary("grammar");
   const scriptCount = scriptSentences().length;
+  const savedCount = savedQueueEntries().length;
 
   renderShell(`
-    <div class="title-block title-block--home title-block--home-root">
-      <div class="title-kicker">English-only review note</div>
-      <h2>English Study Lab</h2>
-    </div>
+    <div class="study-home-shell">
+      <div class="home-nav-row">
+        <button class="home-pill" type="button" data-action="home">\uD648</button>
+        <button class="home-icon" type="button" data-route="custom" aria-label="\uD559\uC2B5 \uD604\uD669">\uD83D\uDCCA</button>
+      </div>
 
-    <section class="home-actions home-actions--root" aria-label="\uB2E8\uC5B4 \uD559\uC2B5 \uD648">
-      <div class="home-actions-stack">
-        <button class="big-button big-button--accent big-button--single" type="button" data-group="word" data-route="library">
-          <div class="big-button__title">\uB2E8\uC5B4</div>
-          <div class="big-button__desc">TOEFL \u00B7 TOEIC ${word.tracks.length}\uAC1C \uD2B8\uB799 / ${word.cards.toLocaleString()}\uAC1C \uCE74\uB4DC</div>
+      <div class="title-block title-block--home title-block--home-root">
+        <h2>\uC601\uC5B4</h2>
+      </div>
+
+      <section class="lookup-home-card">
+        <h3>\uB2E8\uC5B4 \uAC80\uC0C9</h3>
+        <p>\uC601\uC5B4\uB098 \uB73B\uC73C\uB85C \uCC3E\uC544\uBCF4\uACE0 \uBC14\uB85C \uBD81\uB9C8\uD06C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.</p>
+        <div class="lookup-inline-row">
+          <input class="input" id="home-search-input" value="${escapeHtml(state.query)}" placeholder="ex. improve / \uAC1C\uC120\uD558\uB2E4" autocomplete="off" />
+          <button class="home-utility-button" type="button" data-route="search">\uAC80\uC0C9</button>
+        </div>
+      </section>
+
+      <section class="home-category-grid" aria-label="\uD559\uC2B5 \uC720\uD615">
+        <button class="home-category-card" type="button" data-group="word" data-route="library">
+          <span>\uB2E8\uC5B4</span>
+          <small>${word.tracks.length}\uAC1C \uD2B8\uB799 鸚?${word.cards.toLocaleString()}\uAC1C</small>
         </button>
-        <div class="grid-2">
-          <button class="big-button" type="button" data-group="grammar" data-route="library">
-            <div class="big-button__title">\uBB38\uBC95</div>
-            <div class="big-button__desc">${grammar.tracks.length}\uAC1C \uD2B8\uB799 / ${grammar.cards.toLocaleString()}\uAC1C \uCE74\uB4DC</div>
+        <button class="home-category-card" type="button" data-group="grammar" data-route="library">
+          <span>\uBB38\uBC95</span>
+          <small>${grammar.tracks.length}\uAC1C \uD2B8\uB799</small>
+        </button>
+        <button class="home-category-card" type="button" data-route="script">
+          <span>\uBB38\uC7A5</span>
+          <small>${scriptCount}\uBB38\uC7A5 \uBC18\uBCF5</small>
+        </button>
+        <button class="home-category-card" type="button" data-route="script">
+          <span>\uB4E3\uAE30</span>
+          <small>TTS \uBB38\uC7A5 \uC7AC\uC0DD</small>
+        </button>
+        <button class="home-category-card" type="button" data-route="script">
+          <span>\uB300\uBCF8</span>
+          <small>\uC601\uC5B4 \uD14D\uC2A4\uD2B8 \uBD99\uC5EC\uB123\uAE30</small>
+        </button>
+        <button class="home-category-card home-category-card--accent" type="button" data-route="custom">
+          <span>\uB9DE\uCDA4</span>
+          <small>\uC9C4\uD589 鸚?\uC120\uD0DD 鸚?\uC800\uC7A5 ${savedCount.toLocaleString()}\uAC1C</small>
+        </button>
+      </section>
+
+      <section class="script-home-block" aria-label="\uBB38\uC7A5 \uD559\uC2B5">
+        <header class="library-header library-header--inline">
+          <h3 class="library-title">Sentence study</h3>
+        </header>
+        <div class="legacy-home-menu">
+          <button class="legacy-home-card" type="button" data-route="script">
+            <span class="home-card__title">\uBB38\uC7A5</span>
+            <span class="home-card__meta">\uBB38\uC7A5 \uB2E8\uC704 \uD559\uC2B5</span>
           </button>
-          <button class="big-button" type="button" data-route="search">
-            <div class="big-button__title">\uAC80\uC0C9</div>
-            <div class="big-button__desc">\uB2E8\uC5B4, \uB73B, \uC608\uBB38, \uB3D9\uC758\uC5B4 \uD1B5\uD569 \uAC80\uC0C9</div>
+          <button class="legacy-home-card" type="button" data-route="script">
+            <span class="home-card__title">\uB4E3\uAE30</span>
+            <span class="home-card__meta">\uC74C\uC131 \uAD6C\uAC04 \uBC18\uBCF5 \uD559\uC2B5</span>
+          </button>
+          <button class="legacy-home-card" type="button" data-route="script">
+            <span class="home-card__title">\uC77D\uAE30</span>
+            <span class="home-card__meta">\uBB38\uC7A5\uBCC4 \uC77D\uAE30 \uD559\uC2B5</span>
+          </button>
+          <button class="legacy-home-card" type="button" data-route="script">
+            <span class="home-card__title">\uB300\uBCF8</span>
+            <span class="home-card__meta">\uC601\uC0C1/\uC2A4\uD06C\uB9BD\uD2B8 \uBB38\uC7A5 \uD559\uC2B5</span>
           </button>
         </div>
-      </div>
-    </section>
-
-    <section class="section-card home-stats-card" aria-label="\uD559\uC2B5 \uD604\uD669">
-      <div class="stats-grid">
-        <div class="stat"><span>Tracks</span><strong>${stats.tracks}</strong></div>
-        <div class="stat"><span>Cards</span><strong>${stats.cards.toLocaleString()}</strong></div>
-        <div class="stat"><span>Saved</span><strong>${stats.saved.toLocaleString()}</strong></div>
-        <div class="stat"><span>Checked</span><strong>${stats.checked.toLocaleString()}</strong></div>
-      </div>
-    </section>
-
-    <section class="script-home-block" aria-label="\uBB38\uC7A5 \uD559\uC2B5 \uD648">
-      <header class="library-header library-header--inline">
-        <h3 class="library-title">Sentence study</h3>
-      </header>
-      <div class="home-menu">
-        <button class="home-card" type="button" data-route="script">
-          <span class="home-card__title">\uBB38\uC7A5</span>
-          <span class="home-card__meta">\uBD99\uC5EC\uB123\uC740 \uC601\uC5B4 \uB300\uBCF8 ${scriptCount}\uBB38\uC7A5 \uBC18\uBCF5</span>
-        </button>
-        <button class="home-card" type="button" data-route="script">
-          <span class="home-card__title">\uB4E3\uAE30</span>
-          <span class="home-card__meta">\uD604\uC7AC \uBB38\uC7A5\uC744 \uBA3C\uC800 \uB4E3\uACE0 \uB098\uC911\uC5D0 \uD655\uC778</span>
-        </button>
-        <button class="home-card" type="button" data-route="script">
-          <span class="home-card__title">\uC77D\uAE30</span>
-          <span class="home-card__meta">\uBB38\uC7A5 \uB2E8\uC704\uB85C \uC774\uC804/\uB2E4\uC74C \uC774\uB3D9</span>
-        </button>
-        <button class="home-card" type="button" data-route="script">
-          <span class="home-card__title">\uB300\uBCF8</span>
-          <span class="home-card__meta">\uC0C8 \uC601\uC5B4 \uD14D\uC2A4\uD2B8\uB97C \uBD99\uC5EC\uB123\uC5B4 \uD559\uC2B5</span>
-        </button>
-      </div>
-    </section>
-
-    ${renderLibrarySection("word", 6)}
+      </section>
+    </div>
   `, { home: true });
 }
-
 function renderTabs() {
   return `
     <div class="tabs" role="tablist" aria-label="\uD559\uC2B5 \uC885\uB958">
@@ -394,41 +523,45 @@ function renderStudy() {
     renderShell(`<div class="empty">\uC120\uD0DD\uB41C \uD2B8\uB799\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`);
     return;
   }
+  const isQueue = Array.isArray(state.studyQueue);
   const stage = currentStage(track);
   const items = currentItems(track, stage);
   const item = currentItem();
   const progress = ensureTrackProgress(track.id);
-  const itemNumber = Math.min(state.cardIndex + 1, items.length);
+  const itemNumber = isQueue ? Math.min(state.queueIndex + 1, items.length) : Math.min(state.cardIndex + 1, items.length);
   const saved = item ? progress.saved.includes(item.id) : false;
   const checked = item ? progress.checked.includes(item.id) : false;
+  const title = isQueue ? `${state.studyTitle || "Custom"} · ${escapeHtml(track.title)}` : escapeHtml(track.title);
+  const eyebrow = isQueue ? `\uB9DE\uCDA4 \uD559\uC2B5 · ${items.length}\uAC1C` : `${escapeHtml(track.group)} \u00B7 ${escapeHtml(stage?.label || "All")}`;
 
   renderShell(`
-    <div class="study-layout">
-      <aside class="sidebar" aria-label="\uC2A4\uD14C\uC774\uC9C0">
-        ${track.stages.map((entry, index) => `
-          <button class="stage-chip ${index === state.stageIndex ? "active" : ""}" type="button" data-stage-index="${index}">
-            ${escapeHtml(entry.label || `Stage ${index + 1}`)}
-            <br><span>${escapeHtml(entry.range || `${entry.end - entry.start}\uAC1C`)}</span>
-          </button>
-        `).join("")}
-      </aside>
+    <div class="study-layout ${isQueue ? "study-layout--queue" : ""}">
+      ${isQueue ? "" : `
+        <aside class="sidebar" aria-label="\uC2A4\uD14C\uC774\uC9C0">
+          ${track.stages.map((entry, index) => `
+            <button class="stage-chip ${index === state.stageIndex ? "active" : ""}" type="button" data-stage-index="${index}">
+              ${escapeHtml(entry.label || `Stage ${index + 1}`)}
+              <br><span>${escapeHtml(entry.range || `${entry.end - entry.start}\uAC1C`)}</span>
+            </button>
+          `).join("")}
+        </aside>
+      `}
       <section class="study-panel">
         <div class="study-top">
           <div>
-            <div class="eyebrow">${escapeHtml(track.group)} \u00B7 ${escapeHtml(stage?.label || "All")}</div>
-            <h2 class="study-title">${escapeHtml(track.title)}</h2>
+            <div class="eyebrow">${eyebrow}</div>
+            <h2 class="study-title">${title}</h2>
           </div>
           <div class="toolbar">
             <button class="icon-btn" type="button" data-action="prev" aria-label="\uC774\uC804">\u2039</button>
             <button class="icon-btn" type="button" data-action="next" aria-label="\uB2E4\uC74C">\u203A</button>
           </div>
         </div>
-        ${item ? renderStudyCard(item, itemNumber, items.length, saved, checked) : `<div class="empty">\uC774 \uC2A4\uD14C\uC774\uC9C0\uC5D0 \uCE74\uB4DC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
+        ${item ? renderStudyCard(item, itemNumber, items.length, saved, checked) : `<div class="empty">\uD559\uC2B5\uD560 \uCE74\uB4DC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
       </section>
     </div>
   `);
 }
-
 function renderStudyCard(item, current, total, saved, checked) {
   return `
     <article>
@@ -531,6 +664,70 @@ function renderScript() {
   `);
 }
 
+function renderCustomMenu() {
+  const savedCount = savedQueueEntries().length;
+  renderShell(`
+    <div class="legacy-screen">
+      <div class="home-nav-row">
+        <button class="home-pill" type="button" data-route="home">\uD648</button>
+      </div>
+      <section class="legacy-title-card">
+        <h2>\uB9DE\uCDA4</h2>
+        <p>\uC9C4\uD589 \uCD94\uCC9C \uB610\uB294 \uC120\uD0DD \uD559\uC2B5\uC744 \uC9C4\uD589\uD569\uB2C8\uB2E4.</p>
+      </section>
+      <section class="section-card custom-menu-panel">
+        <button class="custom-option-card" type="button" data-action="custom-progress">
+          <strong>\uC9C4\uD589</strong>
+          <span>\uAC00\uC7A5 \uB35C \uC9C4\uD589\uB41C \uBB49\uCE58\uBD80\uD130 \uCC28\uB840\uB300\uB85C \uD559\uC2B5\uD569\uB2C8\uB2E4.</span>
+        </button>
+        <button class="custom-option-card" type="button" data-route="custom-select">
+          <strong>\uC120\uD0DD</strong>
+          <span>\uC5EC\uB7EC \uBB49\uCE58\uB97C \uACE0\uB974\uACE0 \uBB36\uC5B4\uC11C \uD559\uC2B5</span>
+        </button>
+        <div class="custom-saved-row">
+          <button class="custom-option-card" type="button" data-action="custom-saved" ${savedCount ? "" : "disabled"}>
+            <strong>\uC800\uC7A5</strong>
+            <span>\uC800\uC7A5\uB41C \uB2E8\uC5B4 ${savedCount.toLocaleString()}\uAC1C\uB97C \uD559\uC2B5\uD569\uB2C8\uB2E4.</span>
+          </button>
+          <div class="saved-side-actions">
+            <button class="home-utility-button" type="button" data-route="search">[\uBAA9\uB85D]</button>
+            <button class="home-utility-button" type="button" data-action="clear-saved" ${savedCount ? "" : "disabled"}>[\uBAA8\uB450\uD574\uC81C]</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  `);
+}
+
+function renderCustomSelect() {
+  const options = allStageOptions();
+  const selected = new Set(state.customStageKeys);
+  renderShell(`
+    <div class="legacy-screen">
+      <div class="home-nav-row">
+        <button class="home-pill" type="button" data-route="custom">\u2190 \uB9DE\uCDA4</button>
+      </div>
+      <section class="legacy-title-card">
+        <h2>\uC120\uD0DD</h2>
+        <p>\uD559\uC2B5\uD560 \uB2E8\uC5B4 \uBB49\uCE58\uB97C \uACE0\uB985\uB2C8\uB2E4.</p>
+      </section>
+      <section class="section-card custom-select-panel">
+        ${options.map((option) => `
+          <button class="stage-button stage-button--day ${selected.has(option.key) ? "is-active" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
+            <div class="stage-button__main">
+              <div class="stage-button__title">${escapeHtml(option.track.title)} 夷?${escapeHtml(option.stage.label || `Stage ${option.index + 1}`)}</div>
+              <div class="stage-button__meta">${option.total}\uAC1C 夷?${option.percent}% \uC644\uB8CC</div>
+            </div>
+          </button>
+        `).join("")}
+      </section>
+      <button class="big-button big-button--accent big-button--single custom-start-button" type="button" data-action="custom-selected" ${selected.size ? "" : "disabled"}>
+        <div class="big-button__title">\uC2DC\uC791</div>
+        <div class="big-button__desc">${selected.size}\uAC1C \uBB49\uCE58 \uD559\uC2B5</div>
+      </button>
+    </div>
+  `);
+}
 function renderLoading() {
   renderShell(`<div class="empty">\uC601\uC5B4 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.</div>`);
 }
@@ -545,6 +742,8 @@ function render() {
   if (state.route === "study") return renderStudy();
   if (state.route === "search") return renderSearch();
   if (state.route === "script") return renderScript();
+  if (state.route === "custom") return renderCustomMenu();
+  if (state.route === "custom-select") return renderCustomSelect();
   return renderHome();
 }
 
@@ -569,6 +768,11 @@ function bindEvents() {
     if (target.dataset.speakText) speak(target.dataset.speakText);
 
     const action = target.dataset.action;
+    if (action === "custom-progress") startProgressStudy();
+    if (action === "custom-saved") startSavedStudy();
+    if (action === "custom-selected") startSelectedStudy();
+    if (action === "clear-saved") clearSavedItems();
+    if (target.dataset.customStage) toggleCustomStage(target.dataset.customStage);
     if (action === "reveal") {
       state.revealed = true;
       render();
@@ -606,6 +810,9 @@ function bindEvents() {
     if (event.target.id === "search-input") {
       state.query = event.target.value;
       renderSearch();
+    }
+    if (event.target.id === "home-search-input") {
+      state.query = event.target.value;
     }
   });
 
