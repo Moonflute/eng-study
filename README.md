@@ -1,27 +1,29 @@
 # English Study Lab
 
-영어 전용 학습 웹앱입니다. 기존 단어 카드형 학습 흐름과 문장 단위 학습 흐름을 한 화면 체계로 합쳤습니다.
+?곸뼱 ?꾩슜 ?숈뒿 ?뱀빋?낅땲?? 湲곗〈 ?⑥뼱 移대뱶???숈뒿 ?먮쫫怨?臾몄옣 ?⑥쐞 ?숈뒿 ?먮쫫?????붾㈃ 泥닿퀎濡??⑹낀?듬땲??
 
-## 기능
+## 湲곕뒫
 
-- TOEFL/TOEIC 단어 트랙
-- 영어 문법 트랙
-- 스테이지 단위 카드 학습
-- 저장, 체크, 다시 보기, 알았음 진행도
-- 영어 TTS 발음
-- 전체 영어 트랙 검색
-- 직접 붙여넣는 영어 대본 문장 학습
-- GitHub Pages 배포용 PWA 구성
+- TOEFL/TOEIC ?⑥뼱 ?몃옓
+- ?곸뼱 臾몃쾿 ?몃옓
+- ?ㅽ뀒?댁? ?⑥쐞 移대뱶 ?숈뒿
+- ??? 泥댄겕, ?ㅼ떆 蹂닿린, ?뚯븯??吏꾪뻾??- ?곸뼱 TTS 諛쒖쓬
+- ?꾩껜 ?곸뼱 ?몃옓 寃??- 吏곸젒 遺숈뿬?ｋ뒗 ?곸뼱 ?蹂?臾몄옣 ?숈뒿
+- GitHub Pages 諛고룷??PWA 援ъ꽦
 
-## 개발 확인
+## 媛쒕컻 ?뺤씤
 
 ```powershell
 npm run check
 npm run dev
 ```
 
-`npm run dev` 실행 후 `http://localhost:4173`에서 확인합니다.
+`npm run dev` ?ㅽ뻾 ??`http://localhost:4173`?먯꽌 ?뺤씤?⑸땲??
 
-## 배포
+## 諛고룷
 
-`main` 또는 `master` 브랜치에 push하면 `.github/workflows/deploy-pages.yml`이 루트 정적 파일을 GitHub Pages로 배포합니다.
+`main` ?먮뒗 `master` 釉뚮옖移섏뿉 push?섎㈃ `.github/workflows/deploy-pages.yml`??猷⑦듃 ?뺤쟻 ?뚯씪??GitHub Pages濡?諛고룷?⑸땲??
+
+## Icon source
+
+PWA icons are cropped/resized from James Montgomery Flagg's public-domain Uncle Sam poster image hosted on Wikimedia Commons.
