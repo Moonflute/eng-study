@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.4";
+const APP_VERSION = "0.0.5";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -419,12 +419,6 @@ function renderShell(content, options = {}) {
           <div class="brand-subtitle">\uB2E8\uC5B4 \u00B7 \uBB38\uBC95 \u00B7 \uBB38\uC7A5 \uD1B5\uD569 \uD559\uC2B5 v${APP_VERSION}</div>
         </div>
       </div>
-      <nav class="top-actions" aria-label="\uC8FC\uC694 \uBA54\uB274">
-        <button class="btn ghost" type="button" data-route="home">\uD648</button>
-        <button class="btn ghost" type="button" data-route="word">\uB2E8\uC5B4</button>
-        <button class="btn ghost" type="button" data-route="script">\uBB38\uC7A5</button>
-        <button class="btn ghost" type="button" data-route="search">\uAC80\uC0C9</button>
-      </nav>
     </header>`;
   app.innerHTML = `
     ${header}
