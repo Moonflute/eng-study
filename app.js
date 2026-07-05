@@ -348,9 +348,10 @@ function clearSavedItems() {
   render();
 }
 function renderShell(content, options = {}) {
-  const homeClass = options.home ? " topbar--home" : "";
-  app.innerHTML = `
-    <header class="topbar${homeClass}">
+  const header = options.home
+    ? ""
+    : `
+    <header class="topbar">
       <div class="brand" role="button" tabindex="0" data-action="home">
         <div class="brand-mark">E</div>
         <div class="brand-text">
@@ -360,15 +361,16 @@ function renderShell(content, options = {}) {
       </div>
       <nav class="top-actions" aria-label="\uC8FC\uC694 \uBA54\uB274">
         <button class="btn ghost" type="button" data-route="home">\uD648</button>
-        <button class="btn ghost" type="button" data-route="library">\uB2E8\uC5B4</button>
+        <button class="btn ghost" type="button" data-route="word">\uB2E8\uC5B4</button>
         <button class="btn ghost" type="button" data-route="script">\uBB38\uC7A5</button>
         <button class="btn ghost" type="button" data-route="search">\uAC80\uC0C9</button>
       </nav>
-    </header>
+    </header>`;
+  app.innerHTML = `
+    ${header}
     <main class="page${options.home ? " page--home" : ""}">${content}</main>
   `;
 }
-
 function trackSummary(group) {
   const tracks = state.tracks.filter((track) => normalizeGroup(track.group) === group);
   const cards = tracks.reduce((sum, track) => sum + track.items.length, 0);
@@ -377,6 +379,39 @@ function trackSummary(group) {
 }
 
 function renderHome() {
+  renderShell(`
+    <section class="main-library-screen">
+      <header class="main-library-header">
+        <h2>English study</h2>
+      </header>
+      <div class="main-home-menu" aria-label="\uD559\uC2B5 \uBAA9\uB85D">
+        <button class="main-home-card" type="button" data-route="word">
+          <span class="main-home-card__title">\uB2E8\uC5B4</span>
+          <span class="main-home-card__meta">\uB2E8\uC5B4 \uAC80\uC0C9\uACFC \uB9DE\uCDA4 \uD559\uC2B5</span>
+        </button>
+        <button class="main-home-card" type="button" data-group="grammar" data-route="library">
+          <span class="main-home-card__title">\uBB38\uBC95</span>
+          <span class="main-home-card__meta">\uBB38\uBC95 \uD2B8\uB799 \uCE74\uB4DC \uD559\uC2B5</span>
+        </button>
+        <button class="main-home-card" type="button" data-route="script">
+          <span class="main-home-card__title">\uC77D\uAE30</span>
+          <span class="main-home-card__meta">\uBB38\uC7A5 \uB2E8\uC704 \uC77D\uAE30 \uD559\uC2B5</span>
+        </button>
+        <button class="main-home-card" type="button" data-route="script">
+          <span class="main-home-card__title">\uB4E3\uAE30</span>
+          <span class="main-home-card__meta">\uC601\uC5B4 \uBB38\uC7A5 TTS \uBC18\uBCF5</span>
+        </button>
+        <button class="main-home-card" type="button" data-route="script">
+          <span class="main-home-card__title">\uB300\uBCF8</span>
+          <span class="main-home-card__meta">\uC601\uC5B4 \uB300\uBCF8 \uBD99\uC5EC\uB123\uAE30</span>
+        </button>
+      </div>
+      <div class="home-version">v ${APP_VERSION}</div>
+    </section>
+  `, { home: true, simpleHome: true });
+}
+
+function renderWordHome() {
   const word = trackSummary("word");
   const grammar = trackSummary("grammar");
   const scriptCount = scriptSentences().length;
@@ -385,7 +420,7 @@ function renderHome() {
   renderShell(`
     <div class="study-home-shell">
       <div class="home-nav-row">
-        <button class="home-pill" type="button" data-action="home">\uD648</button>
+        <button class="home-pill" type="button" data-route="home">\uD648</button>
         <button class="home-icon" type="button" data-route="custom" aria-label="\uD559\uC2B5 \uD604\uD669">\uD83D\uDCCA</button>
       </div>
 
@@ -405,14 +440,14 @@ function renderHome() {
       <section class="home-category-grid" aria-label="\uD559\uC2B5 \uC720\uD615">
         <button class="home-category-card" type="button" data-group="word" data-route="library">
           <span>\uB2E8\uC5B4</span>
-          <small>${word.tracks.length}\uAC1C \uD2B8\uB799 鸚?${word.cards.toLocaleString()}\uAC1C</small>
+          <small>${word.tracks.length}\uAC1C \uD2B8\uB799 \u00B7 ${word.cards.toLocaleString()}\uAC1C</small>
         </button>
         <button class="home-category-card" type="button" data-group="grammar" data-route="library">
           <span>\uBB38\uBC95</span>
           <small>${grammar.tracks.length}\uAC1C \uD2B8\uB799</small>
         </button>
         <button class="home-category-card" type="button" data-route="script">
-          <span>\uBB38\uC7A5</span>
+          <span>\uC77D\uAE30</span>
           <small>${scriptCount}\uBB38\uC7A5 \uBC18\uBCF5</small>
         </button>
         <button class="home-category-card" type="button" data-route="script">
@@ -425,32 +460,8 @@ function renderHome() {
         </button>
         <button class="home-category-card home-category-card--accent" type="button" data-route="custom">
           <span>\uB9DE\uCDA4</span>
-          <small>\uC9C4\uD589 鸚?\uC120\uD0DD 鸚?\uC800\uC7A5 ${savedCount.toLocaleString()}\uAC1C</small>
+          <small>\uC9C4\uD589 \u00B7 \uC120\uD0DD \u00B7 \uC800\uC7A5 ${savedCount.toLocaleString()}\uAC1C</small>
         </button>
-      </section>
-
-      <section class="script-home-block" aria-label="\uBB38\uC7A5 \uD559\uC2B5">
-        <header class="library-header library-header--inline">
-          <h3 class="library-title">Sentence study</h3>
-        </header>
-        <div class="legacy-home-menu">
-          <button class="legacy-home-card" type="button" data-route="script">
-            <span class="home-card__title">\uBB38\uC7A5</span>
-            <span class="home-card__meta">\uBB38\uC7A5 \uB2E8\uC704 \uD559\uC2B5</span>
-          </button>
-          <button class="legacy-home-card" type="button" data-route="script">
-            <span class="home-card__title">\uB4E3\uAE30</span>
-            <span class="home-card__meta">\uC74C\uC131 \uAD6C\uAC04 \uBC18\uBCF5 \uD559\uC2B5</span>
-          </button>
-          <button class="legacy-home-card" type="button" data-route="script">
-            <span class="home-card__title">\uC77D\uAE30</span>
-            <span class="home-card__meta">\uBB38\uC7A5\uBCC4 \uC77D\uAE30 \uD559\uC2B5</span>
-          </button>
-          <button class="legacy-home-card" type="button" data-route="script">
-            <span class="home-card__title">\uB300\uBCF8</span>
-            <span class="home-card__meta">\uC601\uC0C1/\uC2A4\uD06C\uB9BD\uD2B8 \uBB38\uC7A5 \uD559\uC2B5</span>
-          </button>
-        </div>
       </section>
     </div>
   `, { home: true });
@@ -531,8 +542,8 @@ function renderStudy() {
   const itemNumber = isQueue ? Math.min(state.queueIndex + 1, items.length) : Math.min(state.cardIndex + 1, items.length);
   const saved = item ? progress.saved.includes(item.id) : false;
   const checked = item ? progress.checked.includes(item.id) : false;
-  const title = isQueue ? `${state.studyTitle || "Custom"} · ${escapeHtml(track.title)}` : escapeHtml(track.title);
-  const eyebrow = isQueue ? `\uB9DE\uCDA4 \uD559\uC2B5 · ${items.length}\uAC1C` : `${escapeHtml(track.group)} \u00B7 ${escapeHtml(stage?.label || "All")}`;
+  const title = isQueue ? `${state.studyTitle || "Custom"} \u00B7 ${escapeHtml(track.title)}` : escapeHtml(track.title);
+  const eyebrow = isQueue ? `\uB9DE\uCDA4 \uD559\uC2B5 \u00B7 ${items.length}\uAC1C` : `${escapeHtml(track.group)} \u00B7 ${escapeHtml(stage?.label || "All")}`;
 
   renderShell(`
     <div class="study-layout ${isQueue ? "study-layout--queue" : ""}">
@@ -696,7 +707,7 @@ function renderCustomMenu() {
         </div>
       </section>
     </div>
-  `);
+  `, { home: true });
 }
 
 function renderCustomSelect() {
@@ -715,8 +726,8 @@ function renderCustomSelect() {
         ${options.map((option) => `
           <button class="stage-button stage-button--day ${selected.has(option.key) ? "is-active" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
             <div class="stage-button__main">
-              <div class="stage-button__title">${escapeHtml(option.track.title)} 夷?${escapeHtml(option.stage.label || `Stage ${option.index + 1}`)}</div>
-              <div class="stage-button__meta">${option.total}\uAC1C 夷?${option.percent}% \uC644\uB8CC</div>
+              <div class="stage-button__title">${escapeHtml(option.track.title)} \u00B7 ${escapeHtml(option.stage.label || `Stage ${option.index + 1}`)}</div>
+              <div class="stage-button__meta">${option.total}\uAC1C \u00B7 ${option.percent}% \uC644\uB8CC</div>
             </div>
           </button>
         `).join("")}
@@ -726,7 +737,7 @@ function renderCustomSelect() {
         <div class="big-button__desc">${selected.size}\uAC1C \uBB49\uCE58 \uD559\uC2B5</div>
       </button>
     </div>
-  `);
+  `, { home: true });
 }
 function renderLoading() {
   renderShell(`<div class="empty">\uC601\uC5B4 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.</div>`);
@@ -738,6 +749,7 @@ function renderError() {
 function render() {
   if (state.error) return renderError();
   if (!state.data) return renderLoading();
+  if (state.route === "word") return renderWordHome();
   if (state.route === "library") return renderLibrary();
   if (state.route === "study") return renderStudy();
   if (state.route === "search") return renderSearch();
