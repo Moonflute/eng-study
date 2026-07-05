@@ -72,13 +72,13 @@ function escapeHtml(value) {
 }
 
 function normalizeGroup(group) {
-  if (group === "단어") return "word";
-  if (group === "문법") return "grammar";
+  if (group === "\uB2E8\uC5B4") return "word";
+  if (group === "\uBB38\uBC95") return "grammar";
   return "other";
 }
 
 function groupLabel(group) {
-  return { all: "전체", word: "단어", grammar: "문법", script: "문장" }[group] || group;
+  return { all: "\uC804\uCCB4", word: "\uB2E8\uC5B4", grammar: "\uBB38\uBC95", script: "\uBB38\uC7A5" }[group] || group;
 }
 
 function currentTrack() {
@@ -229,63 +229,112 @@ function searchResults() {
   return results;
 }
 
-function renderShell(content) {
+function renderShell(content, options = {}) {
+  const homeClass = options.home ? " topbar--home" : "";
   app.innerHTML = `
-    <header class="topbar">
+    <header class="topbar${homeClass}">
       <div class="brand" role="button" tabindex="0" data-action="home">
         <div class="brand-mark">E</div>
         <div class="brand-text">
           <h1 class="brand-title">English Study Lab</h1>
-          <div class="brand-subtitle">단어, 문법, 문장 학습 통합판 v${APP_VERSION}</div>
+          <div class="brand-subtitle">\uB2E8\uC5B4 \u00B7 \uBB38\uBC95 \u00B7 \uBB38\uC7A5 \uD1B5\uD569 \uD559\uC2B5 v${APP_VERSION}</div>
         </div>
       </div>
-      <nav class="top-actions" aria-label="주요 메뉴">
-        <button class="btn ghost" type="button" data-route="home">홈</button>
-        <button class="btn ghost" type="button" data-route="library">라이브러리</button>
-        <button class="btn ghost" type="button" data-route="script">문장</button>
-        <button class="btn ghost" type="button" data-route="search">검색</button>
+      <nav class="top-actions" aria-label="\uC8FC\uC694 \uBA54\uB274">
+        <button class="btn ghost" type="button" data-route="home">\uD648</button>
+        <button class="btn ghost" type="button" data-route="library">\uB2E8\uC5B4</button>
+        <button class="btn ghost" type="button" data-route="script">\uBB38\uC7A5</button>
+        <button class="btn ghost" type="button" data-route="search">\uAC80\uC0C9</button>
       </nav>
     </header>
-    <main class="page">${content}</main>
+    <main class="page${options.home ? " page--home" : ""}">${content}</main>
   `;
+}
+
+function trackSummary(group) {
+  const tracks = state.tracks.filter((track) => normalizeGroup(track.group) === group);
+  const cards = tracks.reduce((sum, track) => sum + track.items.length, 0);
+  const stages = tracks.reduce((sum, track) => sum + (track.stages?.length || 0), 0);
+  return { tracks, cards, stages };
 }
 
 function renderHome() {
   const stats = appStats();
+  const word = trackSummary("word");
+  const grammar = trackSummary("grammar");
+  const scriptCount = scriptSentences().length;
+
   renderShell(`
-    <section class="dashboard">
-      <div class="hero">
-        <div>
-          <h2>영어 전용 학습 허브</h2>
-          <p>단어 전용 앱의 반복 카드와, 문장 단위 학습 앱의 읽기·듣기 흐름을 하나로 합쳤습니다. TOEIC, TOEFL, 문법 트랙을 바로 고르고, 직접 넣은 영어 대본도 같은 방식으로 복습할 수 있습니다.</p>
+    <div class="title-block title-block--home title-block--home-root">
+      <div class="title-kicker">English-only review note</div>
+      <h2>English Study Lab</h2>
+    </div>
+
+    <section class="home-actions home-actions--root" aria-label="\uB2E8\uC5B4 \uD559\uC2B5 \uD648">
+      <div class="home-actions-stack">
+        <button class="big-button big-button--accent big-button--single" type="button" data-group="word" data-route="library">
+          <div class="big-button__title">\uB2E8\uC5B4</div>
+          <div class="big-button__desc">TOEFL \u00B7 TOEIC ${word.tracks.length}\uAC1C \uD2B8\uB799 / ${word.cards.toLocaleString()}\uAC1C \uCE74\uB4DC</div>
+        </button>
+        <div class="grid-2">
+          <button class="big-button" type="button" data-group="grammar" data-route="library">
+            <div class="big-button__title">\uBB38\uBC95</div>
+            <div class="big-button__desc">${grammar.tracks.length}\uAC1C \uD2B8\uB799 / ${grammar.cards.toLocaleString()}\uAC1C \uCE74\uB4DC</div>
+          </button>
+          <button class="big-button" type="button" data-route="search">
+            <div class="big-button__title">\uAC80\uC0C9</div>
+            <div class="big-button__desc">\uB2E8\uC5B4, \uB73B, \uC608\uBB38, \uB3D9\uC758\uC5B4 \uD1B5\uD569 \uAC80\uC0C9</div>
+          </button>
         </div>
       </div>
-      <aside class="quick-panel" aria-label="학습 현황">
-        <div class="stats-grid">
-          <div class="stat"><span>Tracks</span><strong>${stats.tracks}</strong></div>
-          <div class="stat"><span>Cards</span><strong>${stats.cards.toLocaleString()}</strong></div>
-          <div class="stat"><span>Saved</span><strong>${stats.saved.toLocaleString()}</strong></div>
-          <div class="stat"><span>Checked</span><strong>${stats.checked.toLocaleString()}</strong></div>
-        </div>
-        <div class="card-actions">
-          <button class="btn primary" type="button" data-route="library">학습 시작</button>
-          <button class="btn" type="button" data-route="script">문장 붙여넣기</button>
-        </div>
-      </aside>
     </section>
-    ${renderLibrarySection("all", 6)}
-  `);
+
+    <section class="section-card home-stats-card" aria-label="\uD559\uC2B5 \uD604\uD669">
+      <div class="stats-grid">
+        <div class="stat"><span>Tracks</span><strong>${stats.tracks}</strong></div>
+        <div class="stat"><span>Cards</span><strong>${stats.cards.toLocaleString()}</strong></div>
+        <div class="stat"><span>Saved</span><strong>${stats.saved.toLocaleString()}</strong></div>
+        <div class="stat"><span>Checked</span><strong>${stats.checked.toLocaleString()}</strong></div>
+      </div>
+    </section>
+
+    <section class="script-home-block" aria-label="\uBB38\uC7A5 \uD559\uC2B5 \uD648">
+      <header class="library-header library-header--inline">
+        <h3 class="library-title">Sentence study</h3>
+      </header>
+      <div class="home-menu">
+        <button class="home-card" type="button" data-route="script">
+          <span class="home-card__title">\uBB38\uC7A5</span>
+          <span class="home-card__meta">\uBD99\uC5EC\uB123\uC740 \uC601\uC5B4 \uB300\uBCF8 ${scriptCount}\uBB38\uC7A5 \uBC18\uBCF5</span>
+        </button>
+        <button class="home-card" type="button" data-route="script">
+          <span class="home-card__title">\uB4E3\uAE30</span>
+          <span class="home-card__meta">\uD604\uC7AC \uBB38\uC7A5\uC744 \uBA3C\uC800 \uB4E3\uACE0 \uB098\uC911\uC5D0 \uD655\uC778</span>
+        </button>
+        <button class="home-card" type="button" data-route="script">
+          <span class="home-card__title">\uC77D\uAE30</span>
+          <span class="home-card__meta">\uBB38\uC7A5 \uB2E8\uC704\uB85C \uC774\uC804/\uB2E4\uC74C \uC774\uB3D9</span>
+        </button>
+        <button class="home-card" type="button" data-route="script">
+          <span class="home-card__title">\uB300\uBCF8</span>
+          <span class="home-card__meta">\uC0C8 \uC601\uC5B4 \uD14D\uC2A4\uD2B8\uB97C \uBD99\uC5EC\uB123\uC5B4 \uD559\uC2B5</span>
+        </button>
+      </div>
+    </section>
+
+    ${renderLibrarySection("word", 6)}
+  `, { home: true });
 }
 
 function renderTabs() {
   return `
-    <div class="tabs" role="tablist" aria-label="학습 종류">
+    <div class="tabs" role="tablist" aria-label="\uD559\uC2B5 \uC885\uB958">
       ${["all", "word", "grammar"].map((group) => `
         <button class="tab" type="button" aria-selected="${state.group === group}" data-group="${group}">
           ${groupLabel(group)}
         </button>
       `).join("")}
-      <button class="tab" type="button" aria-selected="${state.route === "script"}" data-route="script">문장</button>
+      <button class="tab" type="button" aria-selected="${state.route === "script"}" data-route="script">\uBB38\uC7A5</button>
     </div>
   `;
 }
@@ -296,19 +345,19 @@ function renderLibrarySection(group = state.group, limit = Infinity) {
     .slice(0, limit);
 
   return `
-    <section class="section">
+    <section class="section-card section-card--tracks">
       <div class="section-head">
         <div>
           <div class="eyebrow">${groupLabel(group)}</div>
-          <h3>학습 트랙</h3>
+          <h3>\uD559\uC2B5 \uD2B8\uB799</h3>
         </div>
-        <button class="btn ghost" type="button" data-route="library">전체 보기</button>
+        <button class="home-utility-button" type="button" data-route="library">\uC804\uCCB4 \uBCF4\uAE30</button>
       </div>
       ${tracks.length ? `
         <div class="track-grid">
           ${tracks.map(renderTrackCard).join("")}
         </div>
-      ` : `<div class="empty">표시할 영어 트랙이 없습니다.</div>`}
+      ` : `<div class="empty">\uD45C\uC2DC\uD560 \uC601\uC5B4 \uD2B8\uB799\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
     </section>
   `;
 }
@@ -317,22 +366,23 @@ function renderTrackCard(track) {
   const percent = getTrackCompletion(track);
   const stages = track.stages?.length || Math.ceil(track.items.length / 25);
   return `
-    <button class="track-card" type="button" data-track-id="${escapeHtml(track.id)}">
+    <button class="type-button track-card" type="button" data-track-id="${escapeHtml(track.id)}">
       <div>
-        <div class="eyebrow">${escapeHtml(track.group)} · ${stages} stages</div>
-        <h4>${escapeHtml(track.title)}</h4>
+        <div class="type-button__title">${escapeHtml(track.title)}</div>
+        <div class="type-button__meta">${escapeHtml(track.group)} \u00B7 ${track.total.toLocaleString()}\uAC1C \u00B7 ${stages} stages</div>
       </div>
-      <p>${track.total.toLocaleString()}개 카드 · ${track.mode === "meaning_check" ? "뜻 확인" : escapeHtml(track.mode || "study")}</p>
-      <div>
-        <div class="meter" aria-label="완료율 ${percent}%"><span style="width:${percent}%"></span></div>
-        <p>${percent}% 완료</p>
-      </div>
+      <div class="meter" aria-label="\uC644\uB8CC\uC728 ${percent}%"><span style="width:${percent}%"></span></div>
+      <div class="type-button__meta">${percent}% \uC644\uB8CC</div>
     </button>
   `;
 }
 
 function renderLibrary() {
   renderShell(`
+    <div class="title-block">
+      <button class="back-button back-button--ghost" type="button" data-route="home">\uD648</button>
+      <h2>${groupLabel(state.group)} \uD559\uC2B5</h2>
+    </div>
     ${renderTabs()}
     ${renderLibrarySection(state.group)}
   `);
@@ -341,7 +391,7 @@ function renderLibrary() {
 function renderStudy() {
   const track = currentTrack();
   if (!track) {
-    renderShell(`<div class="empty">선택된 트랙이 없습니다.</div>`);
+    renderShell(`<div class="empty">\uC120\uD0DD\uB41C \uD2B8\uB799\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`);
     return;
   }
   const stage = currentStage(track);
@@ -354,26 +404,26 @@ function renderStudy() {
 
   renderShell(`
     <div class="study-layout">
-      <aside class="sidebar" aria-label="스테이지">
+      <aside class="sidebar" aria-label="\uC2A4\uD14C\uC774\uC9C0">
         ${track.stages.map((entry, index) => `
           <button class="stage-chip ${index === state.stageIndex ? "active" : ""}" type="button" data-stage-index="${index}">
             ${escapeHtml(entry.label || `Stage ${index + 1}`)}
-            <br><span>${escapeHtml(entry.range || `${entry.end - entry.start}개`)}</span>
+            <br><span>${escapeHtml(entry.range || `${entry.end - entry.start}\uAC1C`)}</span>
           </button>
         `).join("")}
       </aside>
       <section class="study-panel">
         <div class="study-top">
           <div>
-            <div class="eyebrow">${escapeHtml(track.group)} · ${escapeHtml(stage?.label || "All")}</div>
+            <div class="eyebrow">${escapeHtml(track.group)} \u00B7 ${escapeHtml(stage?.label || "All")}</div>
             <h2 class="study-title">${escapeHtml(track.title)}</h2>
           </div>
           <div class="toolbar">
-            <button class="icon-btn" type="button" data-action="prev" aria-label="이전">‹</button>
-            <button class="icon-btn" type="button" data-action="next" aria-label="다음">›</button>
+            <button class="icon-btn" type="button" data-action="prev" aria-label="\uC774\uC804">\u2039</button>
+            <button class="icon-btn" type="button" data-action="next" aria-label="\uB2E4\uC74C">\u203A</button>
           </div>
         </div>
-        ${item ? renderStudyCard(item, itemNumber, items.length, saved, checked) : `<div class="empty">이 스테이지에 카드가 없습니다.</div>`}
+        ${item ? renderStudyCard(item, itemNumber, items.length, saved, checked) : `<div class="empty">\uC774 \uC2A4\uD14C\uC774\uC9C0\uC5D0 \uCE74\uB4DC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
       </section>
     </div>
   `);
@@ -390,14 +440,14 @@ function renderStudyCard(item, current, total, saved, checked) {
           ${item.exampleJa ? `<p class="example">${escapeHtml(item.exampleJa)}</p>` : ""}
           ${item.exampleKo ? `<p class="example">${escapeHtml(item.exampleKo)}</p>` : ""}
           ${item.note || item.hint ? `<div class="note">${escapeHtml([item.note, item.hint].filter(Boolean).join(" / "))}</div>` : ""}
-        ` : `<button class="btn primary" type="button" data-action="reveal">뜻 보기</button>`}
+        ` : `<button class="btn primary" type="button" data-action="reveal">\uB73B \uBCF4\uAE30</button>`}
       </div>
       <div class="card-actions">
-        <button class="btn" type="button" data-action="speak">발음</button>
-        <button class="btn ${saved ? "accent" : ""}" type="button" data-action="save">${saved ? "저장됨" : "저장"}</button>
-        <button class="btn ${checked ? "primary" : ""}" type="button" data-action="check">${checked ? "체크됨" : "체크"}</button>
-        <button class="btn" type="button" data-action="again">다시</button>
-        <button class="btn primary" type="button" data-action="known">알았음</button>
+        <button class="btn" type="button" data-action="speak">\uBC1C\uC74C</button>
+        <button class="btn ${saved ? "accent" : ""}" type="button" data-action="save">${saved ? "\uC800\uC7A5\uB428" : "\uC800\uC7A5"}</button>
+        <button class="btn ${checked ? "primary" : ""}" type="button" data-action="check">${checked ? "\uCCB4\uD06C\uB428" : "\uCCB4\uD06C"}</button>
+        <button class="btn" type="button" data-action="again">\uB2E4\uC2DC</button>
+        <button class="btn primary" type="button" data-action="known">\uC54C\uC558\uC74C</button>
       </div>
     </article>
   `;
@@ -406,16 +456,16 @@ function renderStudyCard(item, current, total, saved, checked) {
 function renderSearch() {
   const results = searchResults();
   renderShell(`
-    <section class="section">
+    <section class="section-card">
       <div class="section-head">
         <div>
           <div class="eyebrow">Lookup</div>
-          <h3>영어 트랙 검색</h3>
+          <h3>\uC601\uC5B4 \uD2B8\uB799 \uAC80\uC0C9</h3>
         </div>
       </div>
       <div class="search-row">
-        <input class="input" id="search-input" value="${escapeHtml(state.query)}" placeholder="단어, 뜻, 예문, 동의어 검색" autocomplete="off" />
-        <button class="btn primary" type="button" data-action="search-focus">검색</button>
+        <input class="input" id="search-input" value="${escapeHtml(state.query)}" placeholder="\uB2E8\uC5B4, \uB73B, \uC608\uBB38, \uB3D9\uC758\uC5B4 \uAC80\uC0C9" autocomplete="off" />
+        <button class="btn primary" type="button" data-action="search-focus">\uAC80\uC0C9</button>
       </div>
       <div class="result-list">
         ${state.query.trim() ? results.map(({ track, item }) => `
@@ -425,9 +475,9 @@ function renderSearch() {
               <div>${escapeHtml(item.meaning || "")}</div>
               ${item.exampleJa ? `<p>${escapeHtml(item.exampleJa)}</p>` : ""}
             </div>
-            <button class="btn" type="button" data-speak-text="${escapeHtml(item.primary)}">발음</button>
+            <button class="btn" type="button" data-speak-text="${escapeHtml(item.primary)}">\uBC1C\uC74C</button>
           </div>
-        `).join("") || `<div class="empty">검색 결과가 없습니다.</div>` : `<div class="empty">검색어를 입력하면 모든 영어 단어·문법 트랙에서 찾아줍니다.</div>`}
+        `).join("") || `<div class="empty">\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>` : `<div class="empty">\uAC80\uC0C9\uC5B4\uB97C \uC785\uB825\uD558\uBA74 \uBAA8\uB4E0 \uC601\uC5B4 \uB2E8\uC5B4\u00B7\uBB38\uBC95 \uD2B8\uB799\uC5D0\uC11C \uCC3E\uC544\uC90D\uB2C8\uB2E4.</div>`}
       </div>
     </section>
   `);
@@ -440,24 +490,24 @@ function renderScript() {
   const sentences = scriptSentences();
   const current = sentences[state.scriptIndex] || "";
   renderShell(`
-    <section class="section">
+    <section class="section-card">
       <div class="section-head">
         <div>
           <div class="eyebrow">Script Study</div>
-          <h3>문장 단위 학습</h3>
+          <h3>\uBB38\uC7A5 \uB2E8\uC704 \uD559\uC2B5</h3>
         </div>
         <div class="toolbar">
-          <button class="btn" type="button" data-action="script-save">저장</button>
-          <button class="btn primary" type="button" data-action="script-speak">현재 문장 듣기</button>
+          <button class="btn" type="button" data-action="script-save">\uC800\uC7A5</button>
+          <button class="btn primary" type="button" data-action="script-speak">\uD604\uC7AC \uBB38\uC7A5 \uB4E3\uAE30</button>
         </div>
       </div>
       <div class="script-grid">
         <div>
           <textarea class="textarea" id="script-text" spellcheck="false">${escapeHtml(state.scriptText)}</textarea>
           <div class="card-actions">
-            <button class="btn" type="button" data-action="script-prev">이전</button>
-            <button class="btn" type="button" data-action="script-next">다음</button>
-            <button class="btn accent" type="button" data-action="script-reset">예문으로 초기화</button>
+            <button class="btn" type="button" data-action="script-prev">\uC774\uC804</button>
+            <button class="btn" type="button" data-action="script-next">\uB2E4\uC74C</button>
+            <button class="btn accent" type="button" data-action="script-reset">\uC608\uBB38\uC73C\uB85C \uCD08\uAE30\uD654</button>
           </div>
         </div>
         <div class="study-panel">
@@ -465,8 +515,8 @@ function renderScript() {
             <div class="eyebrow">${Math.min(state.scriptIndex + 1, sentences.length || 1)} / ${sentences.length || 0}</div>
             ${current ? `
               <div class="prompt">${state.scriptRevealed ? escapeHtml(current) : "Listen first"}</div>
-              ${state.scriptRevealed ? `<p class="example">${escapeHtml(current)}</p>` : `<button class="btn primary" type="button" data-action="script-reveal">문장 보기</button>`}
-            ` : `<div class="empty">영어 문장을 붙여넣으면 자동으로 문장 카드가 만들어집니다.</div>`}
+              ${state.scriptRevealed ? `<p class="example">${escapeHtml(current)}</p>` : `<button class="btn primary" type="button" data-action="script-reveal">\uBB38\uC7A5 \uBCF4\uAE30</button>`}
+            ` : `<div class="empty">\uC601\uC5B4 \uBB38\uC7A5\uC744 \uBD99\uC5EC\uB123\uC73C\uBA74 \uC790\uB3D9\uC73C\uB85C \uBB38\uC7A5 \uCE74\uB4DC\uAC00 \uB9CC\uB4E4\uC5B4\uC9D1\uB2C8\uB2E4.</div>`}
           </div>
           <div class="sentence-list">
             ${sentences.map((sentence, index) => `
@@ -482,13 +532,12 @@ function renderScript() {
 }
 
 function renderLoading() {
-  renderShell(`<div class="empty">영어 데이터를 불러오는 중입니다.</div>`);
+  renderShell(`<div class="empty">\uC601\uC5B4 \uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911\uC785\uB2C8\uB2E4.</div>`);
 }
 
 function renderError() {
-  renderShell(`<div class="error">${escapeHtml(state.error || "데이터를 불러오지 못했습니다.")}</div>`);
+  renderShell(`<div class="error">${escapeHtml(state.error || "\uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.")}</div>`);
 }
-
 function render() {
   if (state.error) return renderError();
   if (!state.data) return renderLoading();
@@ -583,7 +632,7 @@ async function loadData() {
       .map((track) => ({ ...track, groupKey: normalizeGroup(track.group) }));
     state.trackId = state.tracks[0]?.id || "";
   } catch (error) {
-    state.error = `영어 데이터 로드 실패: ${error.message}`;
+    state.error = `?怨몃선 ?怨쀬뵠??嚥≪뮆諭???쎈솭: ${error.message}`;
   }
   render();
 }
