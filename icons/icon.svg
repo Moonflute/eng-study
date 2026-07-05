@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="English Study Lab">
+  <rect width="128" height="128" rx="24" fill="#f6f0e8"/>
+  <path d="M28 28h72a8 8 0 0 1 8 8v57a8 8 0 0 1-8 8H28a8 8 0 0 1-8-8V36a8 8 0 0 1 8-8Z" fill="#174447"/>
+  <path d="M38 49h34v10H50v10h19v10H50v11H38V49Zm45 0h12v41H83V49Z" fill="#f8d66d"/>
+  <path d="M30 103h68" stroke="#d35f37" stroke-width="8" stroke-linecap="round"/>
+</svg>
