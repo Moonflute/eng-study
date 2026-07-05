@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.7";
+const APP_VERSION = "0.0.8";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
