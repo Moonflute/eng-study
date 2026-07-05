@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.1";
+const APP_VERSION = "0.0.2";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -399,11 +399,7 @@ function renderHome() {
         </button>
         <button class="main-home-card" type="button" data-route="script">
           <span class="main-home-card__title">\uB4E3\uAE30</span>
-          <span class="main-home-card__meta">\uC601\uC5B4 \uBB38\uC7A5 TTS \uBC18\uBCF5</span>
-        </button>
-        <button class="main-home-card" type="button" data-route="script">
-          <span class="main-home-card__title">\uB300\uBCF8</span>
-          <span class="main-home-card__meta">\uC601\uC5B4 \uB300\uBCF8 \uBD99\uC5EC\uB123\uAE30</span>
+          <span class="main-home-card__meta">\uBB38\uC7A5 TTS\uC640 \uB300\uBCF8 \uBD99\uC5EC\uB123\uAE30</span>
         </button>
       </div>
       <div class="home-version">v ${APP_VERSION}</div>
@@ -452,11 +448,7 @@ function renderWordHome() {
         </button>
         <button class="home-category-card" type="button" data-route="script">
           <span>\uB4E3\uAE30</span>
-          <small>TTS \uBB38\uC7A5 \uC7AC\uC0DD</small>
-        </button>
-        <button class="home-category-card" type="button" data-route="script">
-          <span>\uB300\uBCF8</span>
-          <small>\uC601\uC5B4 \uD14D\uC2A4\uD2B8 \uBD99\uC5EC\uB123\uAE30</small>
+          <small>TTS \uC7AC\uC0DD · \uB300\uBCF8 \uBD99\uC5EC\uB123\uAE30</small>
         </button>
         <button class="home-category-card home-category-card--accent" type="button" data-route="custom">
           <span>\uB9DE\uCDA4</span>
