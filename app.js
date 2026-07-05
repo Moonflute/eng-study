@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.6";
+const APP_VERSION = "0.0.7";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -25,6 +25,7 @@ const state = {
   scriptRevealed: false,
   progress: loadProgress(),
   error: "",
+  gamepadButtons: {},
 };
 
 function defaultScriptText() {
@@ -239,7 +240,7 @@ function selectTrack(trackId) {
   const progress = ensureTrackProgress(trackId);
   state.stageIndex = progress.lastStage || 0;
   state.cardIndex = 0;
-  setRoute("study");
+  setRoute("track");
 }
 
 function selectStage(index) {
@@ -254,6 +255,38 @@ function selectStage(index) {
   render();
 }
 
+function startStage(index) {
+  selectStage(index);
+  setRoute("study");
+}
+
+function stageLabel(stage, index) {
+  const label = stage?.label || "";
+  if (/^Stage\s*\d+$/i.test(label) || /^Day\s*\d+$/i.test(label)) return `${index + 1}\uD68C\uB3C5`;
+  return label || `${index + 1}\uD68C\uB3C5`;
+}
+
+function stageRangeLabel(stage) {
+  if (stage?.range) return stage.range;
+  const start = Number(stage?.start || 0) + 1;
+  const end = Number(stage?.end || 0);
+  return `${start}~${end}`;
+}
+
+function stageReviewCount(track, stage) {
+  const progress = ensureTrackProgress(track.id);
+  const known = new Set(progress.known || []);
+  const again = new Set(progress.again || []);
+  return track.items.slice(stage.start, stage.end).filter((item) => known.has(item.id) || again.has(item.id)).length;
+}
+
+function isStageComplete(track, stage) {
+  const progress = ensureTrackProgress(track.id);
+  const known = new Set(progress.known || []);
+  const checked = new Set(progress.checked || []);
+  const items = track.items.slice(stage.start, stage.end);
+  return Boolean(items.length) && items.every((item) => known.has(item.id) || checked.has(item.id));
+}
 function moveCard(delta) {
   if (Array.isArray(state.studyQueue)) {
     state.queueIndex = Math.min(Math.max(0, state.queueIndex + delta), Math.max(0, state.studyQueue.length - 1));
@@ -567,55 +600,101 @@ function renderTabs() {
   `;
 }
 
-function renderLibrarySection(group = state.group, limit = Infinity) {
-  const tracks = state.tracks
-     .filter((track) => group === "all" || (group === "toeic" ? vocabKind(track) === "toeic" : group === "toefl" ? vocabKind(track) === "toefl" : normalizeGroup(track.group) === group))
+function libraryTracks(group = state.group, limit = Infinity) {
+  return state.tracks
+    .filter((track) => group === "all" || (group === "toeic" ? vocabKind(track) === "toeic" : group === "toefl" ? vocabKind(track) === "toefl" : normalizeGroup(track.group) === group))
     .slice(0, limit);
+}
+
+function renderLibrarySection(group = state.group, limit = Infinity) {
+  const tracks = libraryTracks(group, limit);
 
   return `
-    <section class="section-card section-card--tracks">
-      <div class="section-head">
-        <div>
-          <div class="eyebrow">${groupLabel(group)}</div>
-          <h3>\uD559\uC2B5 \uD2B8\uB799</h3>
-        </div>
-        <button class="home-utility-button" type="button" data-route="library">\uC804\uCCB4 \uBCF4\uAE30</button>
+    <section class="section-card word-list-panel">
+      <div class="type-list word-type-list">
+        ${tracks.length ? tracks.map(renderTrackCard).join("") : `<div class="empty">\uD45C\uC2DC\uD560 \uC601\uC5B4 \uD2B8\uB799\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
       </div>
-      ${tracks.length ? `
-        <div class="track-grid">
-          ${tracks.map(renderTrackCard).join("")}
-        </div>
-      ` : `<div class="empty">\uD45C\uC2DC\uD560 \uC601\uC5B4 \uD2B8\uB799\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
     </section>
   `;
 }
 
 function renderTrackCard(track) {
-  const percent = getTrackCompletion(track);
-  const stages = track.stages?.length || Math.ceil(track.items.length / 25);
+  const progress = ensureTrackProgress(track.id);
+  const active = track.id === state.trackId;
   return `
-    <button class="type-button track-card" type="button" data-track-id="${escapeHtml(track.id)}">
-      <div>
-        <div class="type-button__title">${escapeHtml(track.title)}</div>
-        <div class="type-button__meta">${escapeHtml(track.group)} \u00B7 ${track.total.toLocaleString()}\uAC1C \u00B7 ${stages} stages</div>
-      </div>
-      <div class="meter" aria-label="\uC644\uB8CC\uC728 ${percent}%"><span style="width:${percent}%"></span></div>
-      <div class="type-button__meta">${percent}% \uC644\uB8CC</div>
+    <button class="type-button word-type-card${active ? " is-active" : ""}" type="button" data-track-id="${escapeHtml(track.id)}">
+      <div class="type-button__title">${escapeHtml(track.title)}</div>
+      <div class="type-button__meta">${track.total.toLocaleString()}\uAC1C \u00B7 \uC54C\uACE0\uC788\uC74C ${(progress.known || []).length.toLocaleString()} \u00B7 \uACF5\uBD80\uD558\uACA0\uC74C ${(progress.again || []).length.toLocaleString()}</div>
     </button>
   `;
 }
 
 function renderLibrary() {
   renderShell(`
-    <div class="title-block">
-      <button class="back-button back-button--ghost" type="button" data-route="home">\uD648</button>
-      <h2>${groupLabel(state.group)} \uD559\uC2B5</h2>
+    <div class="word-flow-screen">
+      <div class="topbar topbar--home word-topbar">
+        <button class="back-button back-button--ghost" type="button" data-route="word">\uD648</button>
+      </div>
+      <section class="legacy-title-card word-flow-title-card">
+        <h2>${groupLabel(state.group)}</h2>
+        <p>\uC720\uD615 \uBC84\uD2BC\uC744 \uB20C\uB7EC \uD68C\uB3C5 \uD654\uBA74\uC73C\uB85C \uC774\uB3D9\uD569\uB2C8\uB2E4.</p>
+      </section>
+      ${renderLibrarySection(state.group)}
     </div>
-    ${renderTabs()}
-    ${renderLibrarySection(state.group)}
-  `);
+  `, { home: true });
 }
 
+function renderTrackDetail() {
+  const track = currentTrack();
+  if (!track) {
+    renderShell(`<div class="empty">\uC120\uD0DD\uB41C \uD2B8\uB799\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`);
+    return;
+  }
+  const progress = ensureTrackProgress(track.id);
+  const stages = track.stages || [];
+  renderShell(`
+    <div class="word-flow-screen">
+      <div class="topbar topbar--home word-topbar">
+        <button class="back-button back-button--ghost" type="button" data-route="library">\uD648</button>
+      </div>
+      <section class="legacy-title-card word-flow-title-card word-track-title-card">
+        <div class="word-title-row">
+          <div>
+            <h2>${escapeHtml(track.title)}</h2>
+            <p>${escapeHtml(track.description || "\uD68C\uB3C5\uBCC4\uB85C \uB098\uB204\uC5B4 \uB2E8\uC77C \uD559\uC2B5\uC744 \uC9C4\uD589\uD569\uB2C8\uB2E4.")}</p>
+          </div>
+          <button class="stage-preview-button stage-preview-button--title" type="button" aria-label="\uC804\uCCB4 \uBAA9\uB85D \uBCF4\uAE30">&#9776;</button>
+        </div>
+      </section>
+      <section class="section-card word-stage-panel">
+        <div class="stage-list word-stage-list">
+          ${stages.map((stage, index) => {
+            const complete = isStageComplete(track, stage);
+            const reviewCount = stageReviewCount(track, stage);
+            return `
+              <div class="stage-row stage-row--day">
+                <div class="stage-button stage-button--day${index === progress.lastStage ? " is-active" : ""}${complete ? " is-complete" : ""}" data-stage-row-index="${index}">
+                  <div class="stage-button__main">
+                    <div class="stage-button__head">
+                      <div class="stage-button__title">${escapeHtml(stageLabel(stage, index))}</div>
+                      <button class="stage-preview-button stage-preview-button--compact" type="button" aria-label="\uBAA9\uB85D \uBCF4\uAE30">&#9776;</button>
+                    </div>
+                    <div class="stage-button__meta">\uD559\uC2B5 \uBC94\uC704 ${escapeHtml(stageRangeLabel(stage))}</div>
+                    <div class="stage-button__submeta">\uBCF5\uC2B5 \uD6C4\uBCF4 ${reviewCount}\uAC1C${complete ? " \u00B7 \uC644\uB8CC" : ""}</div>
+                  </div>
+                  <div class="stage-button__sidebar">
+                    <button class="stage-action-button stage-action-button--compact" type="button" data-stage-day="${index}">\uB2E8\uC77C</button>
+                    ${complete ? `<span class="stage-badge">\uC644\uB8CC</span>` : ""}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    </div>
+  `, { home: true });
+}
 function renderStudy() {
   const track = currentTrack();
   if (!track) {
@@ -839,6 +918,7 @@ function render() {
   if (!state.data) return renderLoading();
   if (state.route === "word") return renderWordHome();
   if (state.route === "library") return renderLibrary();
+  if (state.route === "track") return renderTrackDetail();
   if (state.route === "study") return renderStudy();
   if (state.route === "search") return renderSearch();
   if (state.route === "reading") return renderSentenceMode("reading");
@@ -849,6 +929,76 @@ function render() {
   return renderHome();
 }
 
+function getPrimaryGamepad() {
+  if (!("getGamepads" in navigator)) return null;
+  return [...(navigator.getGamepads?.() || [])].find(Boolean) || null;
+}
+
+function isGamepadButtonPressed(button) {
+  if (!button) return false;
+  if (typeof button === "number") return button > 0.5;
+  return Boolean(button.pressed) || button.value > 0.5;
+}
+
+function handleGamepadStudyAction(action) {
+  if (state.route !== "study") return;
+  if (action === "known") {
+    markItem("known");
+    return;
+  }
+  if (action === "again") {
+    markItem("again");
+    return;
+  }
+  if (action === "meaning") {
+    state.revealed = true;
+    render();
+    return;
+  }
+  if (action === "speak") {
+    speak(currentItem()?.primary || "");
+    return;
+  }
+  if (action === "bookmark") {
+    markItem("saved");
+    return;
+  }
+  if (action === "check") {
+    markItem("checked");
+    return;
+  }
+  if (action === "prev") {
+    moveCard(-1);
+    return;
+  }
+  if (action === "next") {
+    moveCard(1);
+  }
+}
+
+function pollGamepad() {
+  const pad = getPrimaryGamepad();
+  const nextStates = {};
+  if (pad && state.route === "study") {
+    const mapping = [
+      [0, "known"],
+      [1, "meaning"],
+      [2, "again"],
+      [3, "speak"],
+      [4, "prev"],
+      [5, "bookmark"],
+      [6, "next"],
+      [7, "check"],
+    ];
+    for (const [index, action] of mapping) {
+      const pressed = isGamepadButtonPressed(pad.buttons?.[index]);
+      nextStates[index] = pressed;
+      if (pressed && !state.gamepadButtons[index]) handleGamepadStudyAction(action);
+    }
+  }
+  state.gamepadButtons = nextStates;
+  window.requestAnimationFrame(pollGamepad);
+}
 function bindEvents() {
   document.addEventListener("click", (event) => {
     const target = event.target.closest("button, [data-action='home']");
@@ -865,6 +1015,7 @@ function bindEvents() {
       return;
     }
     if (target.dataset.trackId) selectTrack(target.dataset.trackId);
+    if (target.dataset.stageDay) startStage(Number(target.dataset.stageDay));
     if (target.dataset.stageIndex) selectStage(Number(target.dataset.stageIndex));
     if (target.dataset.scriptIndex) {
       state.scriptIndex = Number(target.dataset.scriptIndex);
@@ -957,6 +1108,7 @@ function registerServiceWorker() {
 
 bindEvents();
 initHistory();
+window.requestAnimationFrame(pollGamepad);
 render();
 loadData();
 registerServiceWorker();
