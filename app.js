@@ -1,6 +1,7 @@
-const APP_VERSION = "0.0.23";
+const APP_VERSION = "0.0.24";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
+const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
 const SOURCE_URL = "./data/english-source.json";
 
 const app = document.querySelector("#app");
@@ -24,6 +25,11 @@ const state = {
   scriptMode: "reading",
   scriptIndex: 0,
   scriptRevealed: false,
+  readingFull: false,
+  listeningLoop: false,
+  listeningContinuous: false,
+  scriptBookmarkMode: false,
+  modeProgress: loadModeProgress(),
   progress: loadProgress(),
   error: "",
   gamepadButtons: {},
@@ -39,6 +45,23 @@ function defaultScriptText() {
   ].join("\n");
 }
 
+function loadModeProgress() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MODE_PROGRESS_STORAGE_KEY) || "{}");
+    return {
+      readingBookmarks: Array.isArray(saved.readingBookmarks) ? saved.readingBookmarks : [],
+      readingSeen: Array.isArray(saved.readingSeen) ? saved.readingSeen : [],
+      listeningBookmarks: Array.isArray(saved.listeningBookmarks) ? saved.listeningBookmarks : [],
+      listeningSeen: Array.isArray(saved.listeningSeen) ? saved.listeningSeen : [],
+    };
+  } catch {
+    return { readingBookmarks: [], readingSeen: [], listeningBookmarks: [], listeningSeen: [] };
+  }
+}
+
+function saveModeProgress() {
+  localStorage.setItem(MODE_PROGRESS_STORAGE_KEY, JSON.stringify(state.modeProgress));
+}
 function loadProgress() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
@@ -163,12 +186,13 @@ function appStats() {
   return { tracks: state.tracks.length, cards: allItems.length, saved, checked, known };
 }
 
-function speak(text, rate = 0.86) {
+function speak(text, rate = 0.86, onend = null) {
   if (!text || !("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "en-US";
   utterance.rate = rate;
+  if (typeof onend === "function") utterance.onend = onend;
   window.speechSynthesis.speak(utterance);
 }
 
@@ -188,6 +212,9 @@ function routeSnapshot() {
     query: state.query,
     scriptMode: state.scriptMode,
     scriptIndex: state.scriptIndex,
+    readingFull: state.readingFull,
+    listeningLoop: state.listeningLoop,
+    listeningContinuous: state.listeningContinuous,
     progressOpen: state.progressOpen,
     savedListOpen: state.savedListOpen,
   };
@@ -218,6 +245,9 @@ function applyRouteSnapshot(snapshot) {
   state.query = next.query || "";
   state.scriptMode = next.scriptMode || state.scriptMode || "reading";
   state.scriptIndex = Number(next.scriptIndex || 0);
+  state.readingFull = Boolean(next.readingFull);
+  state.listeningLoop = Boolean(next.listeningLoop);
+  state.listeningContinuous = Boolean(next.listeningContinuous);
   state.progressOpen = Boolean(next.progressOpen);
   state.savedListOpen = Boolean(next.savedListOpen);
   state.revealed = false;
@@ -236,6 +266,10 @@ function setRoute(route, options = {}) {
   state.route = route;
   state.revealed = false;
   state.scriptRevealed = false;
+  if (route !== "script") {
+    state.readingFull = false;
+    state.scriptBookmarkMode = false;
+  }
   state.savedListOpen = false;
   if (!options.skipHistory) syncHistory(Boolean(options.replace));
   render();
@@ -356,10 +390,24 @@ function scriptSentences() {
   return splitSentences(state.scriptText);
 }
 
+function activeScriptIndices(mode = state.scriptMode) {
+  const entries = scriptEntries();
+  if (!state.scriptBookmarkMode) return entries.map((_, index) => index);
+  const keys = new Set(modeList(mode, "Bookmarks"));
+  return entries.map((_, index) => index).filter((index) => keys.has(modeKey(mode, index)));
+}
 function moveScript(delta) {
-  const sentences = scriptSentences();
-  state.scriptIndex = Math.min(Math.max(0, state.scriptIndex + delta), Math.max(0, sentences.length - 1));
-  state.scriptRevealed = false;
+  const entries = scriptEntries();
+  const active = activeScriptIndices();
+  if (!entries.length) return;
+  if (state.scriptBookmarkMode && active.length) {
+    const currentPosition = Math.max(0, active.indexOf(state.scriptIndex));
+    const nextPosition = Math.min(Math.max(0, currentPosition + delta), active.length - 1);
+    state.scriptIndex = active[nextPosition];
+  } else {
+    state.scriptIndex = Math.min(Math.max(0, state.scriptIndex + delta), Math.max(0, entries.length - 1));
+  }
+  state.scriptRevealed = state.scriptMode === "listening" ? true : false;
   render();
 }
 
@@ -578,15 +626,69 @@ function renderWordHome() {
   `, { home: true });
 }
 
+function scriptEntries() {
+  return splitSentences(state.scriptText).map((source, index) => {
+    const parts = source.split(/\s*(?:\|\||::|=>)\s*/);
+    return {
+      id: `script-${index}`,
+      text: parts[0]?.trim() || source,
+      translation: parts.length > 1 ? parts.slice(1).join(" ").trim() : "",
+    };
+  });
+}
+
+function modeKey(mode, index = state.scriptIndex) {
+  return `${mode}:${index}`;
+}
+
+function modeList(mode, kind) {
+  const key = `${mode}${kind}`;
+  if (!Array.isArray(state.modeProgress[key])) state.modeProgress[key] = [];
+  return state.modeProgress[key];
+}
+
+function toggleModeFlag(mode, kind) {
+  const list = modeList(mode, kind);
+  const key = modeKey(mode);
+  list.includes(key) ? removeValue(list, key) : uniquePush(list, key);
+  saveModeProgress();
+  render();
+}
+
+function modeFlag(mode, kind, index = state.scriptIndex) {
+  return modeList(mode, kind).includes(modeKey(mode, index));
+}
+
+function startScriptMode(mode, bookmarkOnly = false) {
+  state.scriptMode = mode;
+  state.scriptBookmarkMode = Boolean(bookmarkOnly);
+  state.readingFull = false;
+  state.scriptRevealed = mode === "reading" ? false : true;
+  if (bookmarkOnly) {
+    const first = modeList(mode, "Bookmarks")[0];
+    const index = Number(String(first || "").split(":")[1] || 0);
+    state.scriptIndex = Number.isFinite(index) ? index : 0;
+  } else {
+    state.scriptIndex = 0;
+  }
+  setRoute("script");
+}
+
+function scriptModeEntries(mode) {
+  const entries = scriptEntries();
+  const bookmarkKeys = new Set(modeList(mode, "Bookmarks"));
+  if (!state.scriptBookmarkMode) return entries.map((entry, index) => ({ ...entry, index }));
+  return entries.map((entry, index) => ({ ...entry, index })).filter((entry) => bookmarkKeys.has(modeKey(mode, entry.index)));
+}
 function renderSentenceMode(mode) {
   const isListening = mode === "listening";
-  const sentences = scriptSentences();
+  const entries = scriptEntries();
   const title = isListening ? "\uB4E3\uAE30" : "\uC77D\uAE30";
   const desc = isListening
-    ? "\uC74C\uC131 \uAD6C\uAC04\uC744 \uBC18\uBCF5\uD558\uACE0 \uD544\uC694\uD560 \uB54C \uBB38\uC7A5\uC744 \uD655\uC778\uD569\uB2C8\uB2E4."
-    : "\uBB38\uC7A5\uC744 \uD558\uB098\uC529 \uB118\uAE30\uBA70 \uC758\uBBF8\uB97C \uD655\uC778\uD569\uB2C8\uB2E4.";
-  const primary = isListening ? "\uB4E3\uAE30 \uC2DC\uC791" : "\uC77D\uAE30 \uC2DC\uC791";
-  const secondary = isListening ? "\uB300\uBCF8 \uBD99\uC5EC\uB123\uAE30" : "\uAE00 \uBD99\uC5EC\uB123\uAE30";
+    ? "\uBB38\uC7A5 \uAD6C\uAC04\uC744 \uBC18\uBCF5\uD558\uACE0 \uC5F0\uC18D\uC73C\uB85C \uB4E3\uB294 \uD615\uD0DC\uB85C \uD559\uC2B5\uD569\uB2C8\uB2E4."
+    : "\uBB38\uC7A5\uC744 \uC88C\uC6B0\uB85C \uB118\uAE30\uBA70 \uBCF4\uACE0, \uD574\uC11D\uACFC \uC804\uBB38\uC744 \uD1A0\uAE00\uD569\uB2C8\uB2E4.";
+  const bookmarkCount = modeList(mode, "Bookmarks").length;
+  const seenCount = modeList(mode, "Seen").length;
 
   renderShell(`
     <section class="screen-library legacy-mode-screen">
@@ -603,13 +705,13 @@ function renderSentenceMode(mode) {
         <section class="series-group">
           <h3 class="series-group__title">${title}</h3>
           <div class="series-group__items series-group__items--study legacy-mode-grid">
-            <button class="show-item show-item--tile show-item--study" type="button" data-route="script" data-script-mode="${mode}">
-              <span class="show-title">${primary}</span>
-              <span class="show-meta">${sentences.length}\uAC1C \uBB38\uC7A5</span>
+            <button class="show-item show-item--tile show-item--study" type="button" data-script-start="${mode}">
+              <span class="show-title">01회</span>
+              <span class="show-meta">${entries.length}\uAC1C \uBB38\uC7A5 \u00B7 \uBCF8 \uBB38\uC7A5 ${seenCount}\uAC1C</span>
             </button>
-            <button class="show-item show-item--tile show-item--study" type="button" data-route="script" data-script-mode="${mode}">
-              <span class="show-title">${secondary}</span>
-              <span class="show-meta">\uC800\uC7A5\uB41C \uB300\uBCF8 \uC218\uC815</span>
+            <button class="show-item show-item--tile show-item--study" type="button" data-script-bookmarks="${mode}" ${bookmarkCount ? "" : "disabled"}>
+              <span class="show-title">\uBD81\uB9C8\uD06C</span>
+              <span class="show-meta">\uC800\uC7A5\uB41C \uBB38\uC7A5 ${bookmarkCount}\uAC1C</span>
             </button>
           </div>
         </section>
@@ -944,84 +1046,84 @@ function renderSearch() {
   input?.setSelectionRange(input.value.length, input.value.length);
 }
 
+function speakCurrentScript() {
+  const entry = scriptEntries()[state.scriptIndex];
+  if (!entry) return;
+  speak(entry.text, 0.86, () => {
+    if (state.route !== "script" || state.scriptMode !== "listening") return;
+    if (state.listeningLoop) {
+      speakCurrentScript();
+      return;
+    }
+    if (state.listeningContinuous && state.scriptIndex < scriptEntries().length - 1) {
+      moveScript(1);
+      setTimeout(speakCurrentScript, 120);
+    }
+  });
+}
 function renderScript() {
-  const sentences = scriptSentences();
-  const current = sentences[state.scriptIndex] || "";
-  const isListening = state.scriptMode === "listening";
+  const mode = state.scriptMode;
+  const entries = scriptEntries();
+  const activeIndices = activeScriptIndices(mode);
+  const activePosition = Math.max(0, activeIndices.indexOf(state.scriptIndex));
+  const current = entries[state.scriptIndex] || null;
+  const isListening = mode === "listening";
   const title = isListening ? "\uB4E3\uAE30" : "\uC77D\uAE30";
-  const visibleSentence = !isListening || state.scriptRevealed;
+  const revealed = isListening || state.scriptRevealed || state.readingFull;
+  const bookmarked = modeFlag(mode, "Bookmarks");
+  const seen = modeFlag(mode, "Seen");
+  const fullItems = entries.map((entry, index) => `
+    <section class="reading-full__item">
+      <p class="reading-full__sentence">${escapeHtml(entry.text)}</p>
+      ${entry.translation ? `<p class="reading-full__translation">${escapeHtml(entry.translation)}</p>` : ""}
+    </section>
+  `).join("");
+
   renderShell(`
-    <section class="screen-library ${isListening ? "listening-stage" : "reading-stage"}">
-      <div class="library-list-header">
-        <button class="back-button back-button--ghost" type="button" data-route="${isListening ? "listening" : "reading"}">\u2190 ${title}</button>
-        <h2 class="library-list-title">${title}</h2>
-        <button class="home-utility-button" type="button" data-action="script-save">\uC800\uC7A5</button>
-      </div>
-      <div class="library-list library-list--script-study">
-        <section class="section-card script-editor-card">
-          <textarea class="textarea" id="script-text" spellcheck="false">${escapeHtml(state.scriptText)}</textarea>
-          <div class="card-actions">
-            <button class="btn accent" type="button" data-action="script-reset">\uC608\uBB38\uC73C\uB85C \uCD08\uAE30\uD654</button>
+    <section class="screen-player ${isListening ? "listening-stage" : "reading-stage"}">
+      <div class="player-stage ${isListening ? "listening-stage" : "reading-stage"}">
+        <div class="player-topbar">
+          <button class="icon-button text-button" type="button" data-route="${mode}">\uD648</button>
+          <div class="player-meta">
+            <div class="player-title">${title}</div>
+            <div class="player-time">${entries.length ? `${(state.scriptBookmarkMode ? activePosition : state.scriptIndex) + 1} / ${state.scriptBookmarkMode ? activeIndices.length : entries.length}` : "0 / 0"}</div>
           </div>
-        </section>
-        <section class="section-card ${isListening ? "listening-panel" : "reading-panel"} ${visibleSentence ? "is-revealed" : ""}">
-          <div class="card-main">
-            <div class="eyebrow">${Math.min(state.scriptIndex + 1, sentences.length || 1)} / ${sentences.length || 0}</div>
-            ${current ? `
-              <div class="prompt ${isListening ? "listening-sentence" : "reading-sentence"}">${visibleSentence ? escapeHtml(current) : "Listen first"}</div>
-              ${visibleSentence ? `<p class="example reading-extra">${escapeHtml(current)}</p>` : `<button class="btn primary" type="button" data-action="script-reveal">\uBB38\uC7A5 \uBCF4\uAE30</button>`}
-            ` : `<div class="empty">\uC601\uC5B4 \uBB38\uC7A5\uC744 \uBD99\uC5EC\uB123\uC73C\uBA74 \uC790\uB3D9\uC73C\uB85C \uBB38\uC7A5 \uCE74\uB4DC\uAC00 \uB9CC\uB4E4\uC5B4\uC9D1\uB2C8\uB2E4.</div>`}
+          <div class="player-actions">
+            <button class="seen-toggle${seen ? " is-active" : ""}" type="button" data-action="script-seen" aria-label="\uBD24\uC74C \uCCB4\uD06C">\u2713</button>
+            <button class="bookmark-toggle${bookmarked ? " is-active" : ""}" type="button" data-action="script-bookmark" aria-label="\uBD81\uB9C8\uD06C"></button>
           </div>
-          <div class="card-actions reading-actions">
-            <button class="btn" type="button" data-action="script-prev">\uC774\uC804</button>
-            <button class="btn primary" type="button" data-action="script-speak">${isListening ? "\uD604\uC7AC \uBB38\uC7A5 \uB4E3\uAE30" : "\uBC1C\uC74C"}</button>
-            <button class="btn" type="button" data-action="script-next">\uB2E4\uC74C</button>
+        </div>
+        ${isListening ? `
+          <section class="listening-panel">
+            <button class="sentence-nav sentence-nav--prev listening-nav" type="button" data-action="script-prev" aria-label="\uC774\uC804 \uBB38\uC7A5"><span class="sentence-nav__icon">&lt;</span></button>
+            <button class="sentence-nav sentence-nav--next listening-nav" type="button" data-action="script-next" aria-label="\uB2E4\uC74C \uBB38\uC7A5"><span class="sentence-nav__icon">&gt;</span></button>
+            <div class="listening-card">
+              <div class="listening-track-title">${escapeHtml(current?.text || "")}</div>
+              <div class="player-time">${entries.length ? `${(state.scriptBookmarkMode ? activePosition : state.scriptIndex) + 1} / ${state.scriptBookmarkMode ? activeIndices.length : entries.length}` : "0 / 0"}</div>
+              <div class="current-sentence listening-sentence">${escapeHtml(current?.text || "")}</div>
+              <div class="current-translation listening-translation">${escapeHtml(current?.translation || "")}</div>
+              <button class="home-utility-button listening-speak-button" type="button" data-action="script-speak">\uD604\uC7AC \uBB38\uC7A5 \uB4E3\uAE30</button>
+            </div>
+          </section>
+          <div class="floating-actions listening-actions">
+            <button class="reveal-toggle continuous-toggle${state.listeningContinuous ? " is-active" : ""}" type="button" data-action="listening-continuous" aria-pressed="${state.listeningContinuous ? "true" : "false"}">\uC5F0\uC18D</button>
+            <button class="reveal-toggle loop-toggle${state.listeningLoop ? " is-active" : ""}" type="button" data-action="listening-loop" aria-pressed="${state.listeningLoop ? "true" : "false"}">\uBC18\uBCF5</button>
           </div>
-        </section>
-        <section class="sentence-list sentence-list--legacy">
-          ${sentences.map((sentence, index) => `
-            <button class="sentence-row ${index === state.scriptIndex ? "active" : ""}" type="button" data-script-index="${index}">
-              ${escapeHtml(sentence)}
-            </button>
-          `).join("")}
-        </section>
+        ` : `
+          <section class="reading-panel${revealed ? " is-revealed" : ""}${state.readingFull ? " is-full-view" : ""}">
+            <button class="sentence-nav sentence-nav--prev reading-nav${state.readingFull ? " is-hidden" : ""}" type="button" data-action="script-prev" aria-label="\uC774\uC804 \uBB38\uC7A5"><span class="sentence-nav__icon">&lt;</span></button>
+            <button class="sentence-nav sentence-nav--next reading-nav${state.readingFull ? " is-hidden" : ""}" type="button" data-action="script-next" aria-label="\uB2E4\uC74C \uBB38\uC7A5"><span class="sentence-nav__icon">&gt;</span></button>
+            <div class="current-sentence reading-sentence">${state.readingFull ? `<article class="reading-full"><h3 class="reading-full__title">${title}</h3>${fullItems}</article>` : escapeHtml(current?.text || "")}</div>
+            <div class="current-translation reading-extra">${revealed && !state.readingFull ? escapeHtml(current?.translation || current?.text || "") : ""}</div>
+          </section>
+          <div class="floating-actions reading-actions">
+            <label class="reveal-toggle"><input type="checkbox" data-action="reading-reveal" ${state.scriptRevealed ? "checked" : ""}> \uD574\uC11D</label>
+            <label class="reveal-toggle"><input type="checkbox" data-action="reading-full" ${state.readingFull ? "checked" : ""}> \uC804\uBB38</label>
+          </div>
+        `}
       </div>
     </section>
   `, { home: true });
-}
-function renderSavedListModal() {
-  const entries = savedQueueEntries()
-    .map((entry) => ({ track: findTrack(entry.trackId), item: findItem(entry.trackId, entry.itemId) }))
-    .filter((entry) => entry.track && entry.item);
-
-  return `
-    <div class="modal-backdrop saved-list-backdrop">
-      <div class="modal-panel section-card saved-list-modal">
-        <div class="saved-list-head">
-          <div>
-            <div class="saved-list-title">\uC800\uC7A5 \uBAA9\uB85D</div>
-            <div class="saved-list-subtitle">\uC800\uC7A5\uD55C \uB2E8\uC5B4 \uC804\uCCB4 \u00B7 ${entries.length.toLocaleString()}\uAC1C</div>
-          </div>
-          <button class="stage-preview-close" type="button" data-action="saved-list-close" aria-label="\uC800\uC7A5 \uBAA9\uB85D \uB2EB\uAE30">&times;</button>
-        </div>
-        <div class="saved-list-body">
-          ${entries.length ? entries.map(({ track, item }) => `
-            <div class="saved-list-row">
-              <div class="saved-list-word">
-                <strong>${escapeHtml(item.primary)}</strong>
-                <span>${escapeHtml(item.meaning || item.note || "")}</span>
-                <em>${escapeHtml(track.title)}</em>
-              </div>
-              <div class="saved-list-actions">
-                <button class="home-utility-button" type="button" data-speak-text="${escapeHtml(item.primary)}">\uBC1C\uC74C</button>
-                <button class="home-utility-button" type="button" data-unsave-item="${escapeHtml(track.id)}::${escapeHtml(item.id)}">\uD574\uC81C</button>
-              </div>
-            </div>
-          `).join("") : `<div class="stage-preview-empty">\uC800\uC7A5\uD55C \uB2E8\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
-        </div>
-      </div>
-    </div>
-  `;
 }
 function renderCustomMenu() {
   const savedCount = savedQueueEntries().length;
@@ -1210,10 +1312,18 @@ function pollGamepad() {
 }
 function bindEvents() {
   document.addEventListener("click", (event) => {
-    const target = event.target.closest("button, [data-action='home']");
+    const target = event.target.closest("button, input, [data-action='home']");
     if (!target) return;
     if (target.dataset.vocabKind) state.group = target.dataset.vocabKind;
     if (target.dataset.group) state.group = target.dataset.group;
+    if (target.dataset.scriptStart) {
+      startScriptMode(target.dataset.scriptStart, false);
+      return;
+    }
+    if (target.dataset.scriptBookmarks) {
+      startScriptMode(target.dataset.scriptBookmarks, true);
+      return;
+    }
     if (target.dataset.route) {
       if (target.dataset.scriptMode) state.scriptMode = target.dataset.scriptMode;
       setRoute(target.dataset.route);
@@ -1301,7 +1411,27 @@ function bindEvents() {
       saveScript();
       render();
     }
-    if (action === "script-speak") speak(scriptSentences()[state.scriptIndex] || "");
+    if (action === "script-speak") speakCurrentScript();
+    if (action === "script-bookmark") toggleModeFlag(state.scriptMode, "Bookmarks");
+    if (action === "script-seen") toggleModeFlag(state.scriptMode, "Seen");
+    if (action === "reading-reveal") {
+      state.scriptRevealed = Boolean(target.checked);
+      render();
+    }
+    if (action === "reading-full") {
+      state.readingFull = Boolean(target.checked);
+      render();
+    }
+    if (action === "listening-loop") {
+      state.listeningLoop = !state.listeningLoop;
+      if (state.listeningLoop) state.listeningContinuous = false;
+      render();
+    }
+    if (action === "listening-continuous") {
+      state.listeningContinuous = !state.listeningContinuous;
+      if (state.listeningContinuous) state.listeningLoop = false;
+      render();
+    }
     if (action === "script-reveal") {
       state.scriptRevealed = true;
       render();
@@ -1331,7 +1461,7 @@ function bindEvents() {
     if (event.key === " ") {
       event.preventDefault();
       if (state.route === "study") state.revealed ? speak(currentItem()?.primary || "") : (state.revealed = true, render());
-      if (state.route === "script") state.scriptRevealed ? speak(scriptSentences()[state.scriptIndex] || "") : (state.scriptRevealed = true, render());
+      if (state.route === "script") state.scriptRevealed ? speak(scriptEntries()[state.scriptIndex]?.text || "") : (state.scriptRevealed = true, render());
     }
     if (event.key === "ArrowLeft") state.route === "script" ? moveScript(-1) : moveCard(-1);
     if (event.key === "ArrowRight") state.route === "script" ? moveScript(1) : moveCard(1);
