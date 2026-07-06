@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.22";
+const APP_VERSION = "0.0.23";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -798,6 +798,24 @@ function renderTrackDetail() {
     </div>
   `, { home: true });
 }
+function studyStatsForEntries(entries, fallbackTrack = null) {
+  let known = 0;
+  let again = 0;
+  for (const entry of entries) {
+    const trackId = entry.trackId || fallbackTrack?.id;
+    if (!trackId) continue;
+    const itemId = entry.itemId || entry.id;
+    const progress = ensureTrackProgress(trackId);
+    if (progress.known.includes(itemId)) known += 1;
+    if (progress.again.includes(itemId)) again += 1;
+  }
+  return { known, again };
+}
+
+function studyRangeText(track, stage, isQueue) {
+  if (isQueue) return `\uB9DE\uCDA4 \uBB49\uCE58 \u00B7 ${state.studyTitle || "Custom"}`;
+  return `${escapeHtml(stageRangeLabel(stage))} \u00B7 ${escapeHtml(stageLabel(stage, state.stageIndex))}`;
+}
 function renderStudy() {
   const track = currentTrack();
   if (!track) {
@@ -813,75 +831,75 @@ function renderStudy() {
   const saved = item ? progress.saved.includes(item.id) : false;
   const checked = item ? progress.checked.includes(item.id) : false;
   const title = isQueue ? `${state.studyTitle || "Custom"} \u00B7 ${escapeHtml(track.title)}` : escapeHtml(track.title);
-  const eyebrow = isQueue ? `\uB9DE\uCDA4 \uD559\uC2B5 \u00B7 ${items.length}\uAC1C` : `${escapeHtml(track.group)} \u00B7 ${escapeHtml(stage?.label || "All")}`;
+  const entriesForStats = isQueue ? state.studyQueue : items;
+  const stats = studyStatsForEntries(entriesForStats, track);
+  const progressText = `${itemNumber}/${items.length || 0}`;
+  const rangeText = studyRangeText(track, stage, isQueue);
 
   renderShell(`
-    <div class="study-layout ${isQueue ? "study-layout--queue" : ""}">
-      ${isQueue ? "" : `
-        <aside class="sidebar" aria-label="\uC2A4\uD14C\uC774\uC9C0">
-          ${track.stages.map((entry, index) => `
-            <button class="stage-chip ${index === state.stageIndex ? "active" : ""}" type="button" data-stage-index="${index}">
-              ${escapeHtml(entry.label || `Stage ${index + 1}`)}
-              <br><span>${escapeHtml(entry.range || `${entry.end - entry.start}\uAC1C`)}</span>
-            </button>
-          `).join("")}
-        </aside>
-      `}
-      <section class="study-panel">
-        <div class="study-top">
+    <div class="legacy-screen study-screen">
+      <div class="home-nav-row">
+        <button class="home-pill" type="button" data-route="${isQueue ? "custom" : "track"}">\uD648</button>
+      </div>
+      <section class="section-card study-info-card">
+        <div class="study-head">
           <div>
-            <div class="eyebrow">${eyebrow}</div>
-            <h2 class="study-title">${title}</h2>
+            <h1 class="page-title page-title--study">${title}</h1>
+            <div class="study-inline-meta">
+              <span class="page-subtitle">\uC601\uC5B4\uB97C \uBCF4\uACE0 \uB73B\uC744 \uB5A0\uC62C\uB9B0 \uB4A4 \uD655\uC778</span>
+            </div>
           </div>
-          <div class="toolbar">
-            <button class="icon-btn" type="button" data-action="prev" aria-label="\uC774\uC804">\u2039</button>
-            <button class="icon-btn" type="button" data-action="next" aria-label="\uB2E4\uC74C">\u203A</button>
+          <div class="study-progress">${progressText}</div>
+        </div>
+        <div class="study-summary-row">
+          <div class="study-summary-left">
+            <span class="page-subtitle">${rangeText}</span>
+          </div>
+          <div class="study-summary-stats">
+            <span class="study-stat-chip">\uC54C\uACE0\uC788\uC74C <strong>${stats.known}</strong></span>
+            <span class="study-stat-chip">\uACF5\uBD80\uD558\uACA0\uC74C <strong>${stats.again}</strong></span>
           </div>
         </div>
+      </section>
+      <section class="section-card card-frame">
         ${item ? renderStudyCard(item, itemNumber, items.length, saved, checked) : `<div class="empty">\uD559\uC2B5\uD560 \uCE74\uB4DC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
       </section>
     </div>
-  `);
+  `, { home: true });
 }
 function renderStudyCard(item, current, total, saved, checked) {
   const hasExample = Boolean(item.exampleJa || item.exampleKo);
   const hasNote = Boolean(item.note || item.hint);
-  const exampleBlock = state.revealed && hasExample
-    ? `
-      <div class="card-example-shell">
-        ${item.exampleJa ? `<div class="card-example">${escapeHtml(item.exampleJa)}</div>` : ""}
-        ${item.exampleKo ? `<div class="card-example card-example--ko">${escapeHtml(item.exampleKo)}</div>` : ""}
-      </div>
-    `
-    : `<div class="card-example-shell card-example-shell--empty">&nbsp;</div>`;
-  const noteBlock = state.revealed && hasNote
-    ? `<div class="card-note">${escapeHtml([item.note, item.hint].filter(Boolean).join(" / "))}</div>`
-    : "";
+  const exampleJa = state.revealed && item.exampleJa ? escapeHtml(item.exampleJa) : "&nbsp;";
+  const exampleKo = state.revealed && item.exampleKo ? escapeHtml(item.exampleKo) : "&nbsp;";
+  const noteText = state.revealed && hasNote ? escapeHtml([item.note, item.hint].filter(Boolean).join(" / ")) : "";
 
   return `
-    <article class="card-frame">
-      <div class="card-panel">
-        <button class="card-speak-button" type="button" data-action="speak" aria-label="\uBC1C\uC74C \uB4E3\uAE30">&#128266;</button>
-        <button class="card-check-button${checked ? " is-active" : ""}" type="button" data-action="check" aria-label="${checked ? "\uCCB4\uD06C \uD574\uC81C" : "\uCCB4\uD06C"}">&#9989;</button>
-        <button class="card-bookmark-button${saved ? " is-active" : ""}" type="button" data-action="save" aria-label="${saved ? "\uC800\uC7A5 \uD574\uC81C" : "\uC800\uC7A5"}">&#128278;</button>
-        <div class="card-mode">${current} / ${total}</div>
-        <div class="card-primary">${escapeHtml(item.primary)}</div>
-        <div class="card-slot card-meaning${state.revealed ? "" : " is-empty"}">${state.revealed ? escapeHtml(item.meaning || "") : "&nbsp;"}</div>
-        ${exampleBlock}
-        ${noteBlock}
+    <div class="card-panel">
+      <button class="card-speak-button" type="button" data-action="speak" aria-label="\uB2E8\uC5B4 \uBC1C\uC74C \uB4E3\uAE30">&#128266;</button>
+      <button class="card-check-button${checked ? " is-active" : ""}" type="button" data-action="check" aria-label="${checked ? "\uCCB4\uD06C \uD574\uC81C" : "\uCCB4\uD06C \uC800\uC7A5"}">&#9989;</button>
+      <button class="card-bookmark-button${saved ? " is-active" : ""}" type="button" data-action="save" aria-label="${saved ? "\uC800\uC7A5 \uD574\uC81C" : "\uC800\uC7A5"}">&#128278;</button>
+      <div class="card-primary">${escapeHtml(item.primary)}</div>
+      <div class="card-slot card-meaning${state.revealed ? "" : " is-empty"}">${state.revealed ? escapeHtml(item.meaning || "") : "&nbsp;"}</div>
+      <div class="card-slot card-choice${noteText ? "" : " is-empty"}">${noteText || "&nbsp;"}</div>
+      <div class="card-example-shell">
+        <div class="card-example${state.revealed && item.exampleJa ? "" : " is-empty"}">${exampleJa}</div>
+        <div class="card-example card-example--ko${state.revealed && item.exampleKo ? "" : " is-empty"}">${exampleKo}</div>
       </div>
-      <div class="action-stack">
-        <div class="action-row action-row--primary">
-          <button class="action-button${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uB73B \uBCF4\uAE30</button>
-          ${hasExample ? `<button class="action-button${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uC608\uBB38 \uBCF4\uAE30</button>` : ""}
-          ${hasNote ? `<button class="action-button${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uBA54\uBAA8 \uBCF4\uAE30</button>` : ""}
-        </div>
-        <div class="decision-row">
-          <button class="decision-button decision-button--again" type="button" data-action="again">\uACF5\uBD80\uD558\uACA0\uC74C</button>
-          <button class="decision-button decision-button--known" type="button" data-action="known">\uC54C\uACE0\uC788\uC74C</button>
-        </div>
+    </div>
+    <div class="action-stack">
+      <div class="action-row action-row--primary">
+        <button class="action-button${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uB73B \uBCF4\uAE30</button>
       </div>
-    </article>
+      ${hasExample ? `<div class="action-row action-row--examples">
+        <button class="action-button action-button--secondary${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uC608\uBB38 \uBCF4\uAE30</button>
+        ${hasNote ? `<button class="action-button action-button--secondary${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uBA54\uBAA8 \uBCF4\uAE30</button>` : ""}
+      </div>` : ""}
+      <div class="decision-row">
+        <button class="decision-button decision-button--again" type="button" data-action="again">\uACF5\uBD80\uD558\uACA0\uC74C</button>
+        <button class="decision-button decision-button--known" type="button" data-action="known">\uC54C\uACE0\uC788\uC74C</button>
+      </div>
+    </div>
   `;
 }
 
