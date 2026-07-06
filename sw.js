@@ -1,4 +1,4 @@
-const CACHE_NAME = "english-study-lab-v0.0.17";
+const CACHE_NAME = "english-study-lab-v0.0.18";
 const CORE_ASSETS = [
   "./",
   "./index.html",

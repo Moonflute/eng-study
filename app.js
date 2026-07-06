@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.17";
+const APP_VERSION = "0.0.18";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -28,6 +28,7 @@ const state = {
   error: "",
   gamepadButtons: {},
   progressOpen: false,
+  savedListOpen: false,
 };
 
 function defaultScriptText() {
@@ -188,6 +189,7 @@ function routeSnapshot() {
     scriptMode: state.scriptMode,
     scriptIndex: state.scriptIndex,
     progressOpen: state.progressOpen,
+    savedListOpen: state.savedListOpen,
   };
 }
 
@@ -217,6 +219,7 @@ function applyRouteSnapshot(snapshot) {
   state.scriptMode = next.scriptMode || state.scriptMode || "reading";
   state.scriptIndex = Number(next.scriptIndex || 0);
   state.progressOpen = Boolean(next.progressOpen);
+  state.savedListOpen = Boolean(next.savedListOpen);
   state.revealed = false;
   state.scriptRevealed = false;
   render();
@@ -233,6 +236,7 @@ function setRoute(route, options = {}) {
   state.route = route;
   state.revealed = false;
   state.scriptRevealed = false;
+  state.savedListOpen = false;
   if (!options.skipHistory) syncHistory(Boolean(options.replace));
   render();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -925,6 +929,40 @@ function renderScript() {
     </section>
   `, { home: true });
 }
+function renderSavedListModal() {
+  const entries = savedQueueEntries()
+    .map((entry) => ({ track: findTrack(entry.trackId), item: findItem(entry.trackId, entry.itemId) }))
+    .filter((entry) => entry.track && entry.item);
+
+  return `
+    <div class="modal-backdrop saved-list-backdrop">
+      <div class="modal-panel section-card saved-list-modal">
+        <div class="saved-list-head">
+          <div>
+            <div class="saved-list-title">\uC800\uC7A5 \uBAA9\uB85D</div>
+            <div class="saved-list-subtitle">\uC800\uC7A5\uD55C \uB2E8\uC5B4 \uC804\uCCB4 \u00B7 ${entries.length.toLocaleString()}\uAC1C</div>
+          </div>
+          <button class="stage-preview-close" type="button" data-action="saved-list-close" aria-label="\uC800\uC7A5 \uBAA9\uB85D \uB2EB\uAE30">&times;</button>
+        </div>
+        <div class="saved-list-body">
+          ${entries.length ? entries.map(({ track, item }) => `
+            <div class="saved-list-row">
+              <div class="saved-list-word">
+                <strong>${escapeHtml(item.primary)}</strong>
+                <span>${escapeHtml(item.meaning || item.note || "")}</span>
+                <em>${escapeHtml(track.title)}</em>
+              </div>
+              <div class="saved-list-actions">
+                <button class="home-utility-button" type="button" data-speak-text="${escapeHtml(item.primary)}">\uBC1C\uC74C</button>
+                <button class="home-utility-button" type="button" data-unsave-item="${escapeHtml(track.id)}::${escapeHtml(item.id)}">\uD574\uC81C</button>
+              </div>
+            </div>
+          `).join("") : `<div class="stage-preview-empty">\uC800\uC7A5\uD55C \uB2E8\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
 function renderCustomMenu() {
   const savedCount = savedQueueEntries().length;
   renderShell(`
@@ -951,11 +989,12 @@ function renderCustomMenu() {
             <span>\uC800\uC7A5\uB41C \uB2E8\uC5B4 ${savedCount.toLocaleString()}\uAC1C\uB97C \uD559\uC2B5\uD569\uB2C8\uB2E4.</span>
           </button>
           <div class="saved-side-actions">
-            <button class="home-utility-button" type="button" data-route="search">[\uBAA9\uB85D]</button>
+            <button class="home-utility-button" type="button" data-action="saved-list-open">[\uBAA9\uB85D]</button>
             <button class="home-utility-button" type="button" data-action="clear-saved" ${savedCount ? "" : "disabled"}>[\uBAA8\uB450\uD574\uC81C]</button>
           </div>
         </div>
       </section>
+      ${state.savedListOpen ? renderSavedListModal() : ""}
     </div>
   `, { home: true });
 }
@@ -1133,6 +1172,14 @@ function bindEvents() {
       render();
     }
     if (target.dataset.speakText) speak(target.dataset.speakText);
+    if (target.dataset.unsaveItem) {
+      const [trackId, itemId] = target.dataset.unsaveItem.split("::");
+      const progress = ensureTrackProgress(trackId);
+      removeValue(progress.saved, itemId);
+      saveProgress();
+      render();
+      return;
+    }
 
     const action = target.dataset.action;
     if (action === "progress-open") {
@@ -1141,6 +1188,14 @@ function bindEvents() {
     }
     if (action === "progress-close") {
       state.progressOpen = false;
+      render();
+    }
+    if (action === "saved-list-open") {
+      state.savedListOpen = true;
+      render();
+    }
+    if (action === "saved-list-close") {
+      state.savedListOpen = false;
       render();
     }
     if (action === "custom-clear") {
