@@ -2258,3 +2258,23 @@ button {
     margin-bottom: 14px;
   }
 }
+.result-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-actions .btn {
+  min-width: 76px;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .result {
+    grid-template-columns: 1fr;
+  }
+
+  .result-actions {
+    justify-content: flex-end;
+  }
+}

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.21";
+const APP_VERSION = "0.0.22";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -334,6 +334,16 @@ function markItem(kind) {
   else render();
 }
 
+function toggleItemFlag(trackId, itemId, kind) {
+  const progress = ensureTrackProgress(trackId);
+  if (kind === "saved") {
+    progress.saved.includes(itemId) ? removeValue(progress.saved, itemId) : uniquePush(progress.saved, itemId);
+  }
+  if (kind === "checked") {
+    progress.checked.includes(itemId) ? removeValue(progress.checked, itemId) : uniquePush(progress.checked, itemId);
+  }
+  saveProgress();
+}
 function splitSentences(text) {
   return text
     .replace(/\r/g, "")
@@ -890,15 +900,24 @@ function renderSearch() {
         <button class="btn primary" type="button" data-action="search-focus">\uAC80\uC0C9</button>
       </div>
       <div class="result-list">
-        ${state.query.trim() ? results.map(({ track, item }) => `
-          <div class="result">
-            <div>
-              <strong>${escapeHtml(item.primary)} <span class="eyebrow">${escapeHtml(track.title)}</span></strong>
-              <div>${escapeHtml(item.meaning || "")}</div>
+        ${state.query.trim() ? results.map(({ track, item }) => {
+          const progress = ensureTrackProgress(track.id);
+          const saved = progress.saved.includes(item.id);
+          const checked = progress.checked.includes(item.id);
+          const key = `${escapeHtml(track.id)}::${escapeHtml(item.id)}`;
+          return `
+            <div class="result">
+              <div>
+                <strong>${escapeHtml(item.primary)} <span class="eyebrow">${escapeHtml(track.title)}</span></strong>
+                <div>${escapeHtml(item.meaning || "")}</div>
+              </div>
+              <div class="result-actions">
+                <button class="btn ${saved ? "accent" : ""}" type="button" data-lookup-save="${key}">${saved ? "\uC800\uC7A5\uB428" : "\uC800\uC7A5"}</button>
+                <button class="btn ${checked ? "primary" : ""}" type="button" data-lookup-check="${key}">${checked ? "\uCCB4\uD06C\uB428" : "\uCCB4\uD06C"}</button>
+              </div>
             </div>
-            <button class="btn" type="button" data-speak-text="${escapeHtml(item.primary)}">\uBC1C\uC74C</button>
-          </div>
-        `).join("") || `<div class="empty">\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>` : `<div class="empty">\uB2E8\uC5B4 \uD2B8\uB799\uC758 \uC601\uC5B4\uC640 \uB73B\uC5D0\uC11C\uB9CC \uCC3E\uC544\uC90D\uB2C8\uB2E4.</div>`}
+          `;
+        }).join("") || `<div class="empty">\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>` : `<div class="empty">\uB2E8\uC5B4 \uD2B8\uB799\uC758 \uC601\uC5B4\uC640 \uB73B\uC5D0\uC11C\uB9CC \uCC3E\uC544\uC90D\uB2C8\uB2E4.</div>`}
       </div>
     </section>
   `);
@@ -1195,6 +1214,18 @@ function bindEvents() {
       render();
     }
     if (target.dataset.speakText) speak(target.dataset.speakText);
+    if (target.dataset.lookupSave) {
+      const [trackId, itemId] = target.dataset.lookupSave.split("::");
+      toggleItemFlag(trackId, itemId, "saved");
+      renderSearch();
+      return;
+    }
+    if (target.dataset.lookupCheck) {
+      const [trackId, itemId] = target.dataset.lookupCheck.split("::");
+      toggleItemFlag(trackId, itemId, "checked");
+      renderSearch();
+      return;
+    }
     if (target.dataset.unsaveItem) {
       const [trackId, itemId] = target.dataset.unsaveItem.split("::");
       const progress = ensureTrackProgress(trackId);
