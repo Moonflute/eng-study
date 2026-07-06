@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.18";
+const APP_VERSION = "0.0.19";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -828,24 +828,42 @@ function renderStudy() {
   `);
 }
 function renderStudyCard(item, current, total, saved, checked) {
-  return `
-    <article>
-      <div class="card-main">
-        <div class="eyebrow">${current} / ${total}</div>
-        <div class="prompt">${escapeHtml(item.primary)}</div>
-        ${state.revealed ? `
-          <div class="meaning">${escapeHtml(item.meaning || "")}</div>
-          ${item.exampleJa ? `<p class="example">${escapeHtml(item.exampleJa)}</p>` : ""}
-          ${item.exampleKo ? `<p class="example">${escapeHtml(item.exampleKo)}</p>` : ""}
-          ${item.note || item.hint ? `<div class="note">${escapeHtml([item.note, item.hint].filter(Boolean).join(" / "))}</div>` : ""}
-        ` : `<button class="btn primary" type="button" data-action="reveal">\uB73B \uBCF4\uAE30</button>`}
+  const hasExample = Boolean(item.exampleJa || item.exampleKo);
+  const hasNote = Boolean(item.note || item.hint);
+  const exampleBlock = state.revealed && hasExample
+    ? `
+      <div class="card-example-shell">
+        ${item.exampleJa ? `<div class="card-example">${escapeHtml(item.exampleJa)}</div>` : ""}
+        ${item.exampleKo ? `<div class="card-example card-example--ko">${escapeHtml(item.exampleKo)}</div>` : ""}
       </div>
-      <div class="card-actions">
-        <button class="btn" type="button" data-action="speak">\uBC1C\uC74C</button>
-        <button class="btn ${saved ? "accent" : ""}" type="button" data-action="save">${saved ? "\uC800\uC7A5\uB428" : "\uC800\uC7A5"}</button>
-        <button class="btn ${checked ? "primary" : ""}" type="button" data-action="check">${checked ? "\uCCB4\uD06C\uB428" : "\uCCB4\uD06C"}</button>
-        <button class="btn" type="button" data-action="again">\uB2E4\uC2DC</button>
-        <button class="btn primary" type="button" data-action="known">\uC54C\uC558\uC74C</button>
+    `
+    : `<div class="card-example-shell card-example-shell--empty">&nbsp;</div>`;
+  const noteBlock = state.revealed && hasNote
+    ? `<div class="card-note">${escapeHtml([item.note, item.hint].filter(Boolean).join(" / "))}</div>`
+    : "";
+
+  return `
+    <article class="card-frame">
+      <div class="card-panel">
+        <button class="card-speak-button" type="button" data-action="speak" aria-label="\uBC1C\uC74C \uB4E3\uAE30">&#128266;</button>
+        <button class="card-check-button${checked ? " is-active" : ""}" type="button" data-action="check" aria-label="${checked ? "\uCCB4\uD06C \uD574\uC81C" : "\uCCB4\uD06C"}">&#9989;</button>
+        <button class="card-bookmark-button${saved ? " is-active" : ""}" type="button" data-action="save" aria-label="${saved ? "\uC800\uC7A5 \uD574\uC81C" : "\uC800\uC7A5"}">&#128278;</button>
+        <div class="card-mode">${current} / ${total}</div>
+        <div class="card-primary">${escapeHtml(item.primary)}</div>
+        <div class="card-slot card-meaning${state.revealed ? "" : " is-empty"}">${state.revealed ? escapeHtml(item.meaning || "") : "&nbsp;"}</div>
+        ${exampleBlock}
+        ${noteBlock}
+      </div>
+      <div class="action-stack">
+        <div class="action-row action-row--primary">
+          <button class="action-button${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uB73B \uBCF4\uAE30</button>
+          ${hasExample ? `<button class="action-button${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uC608\uBB38 \uBCF4\uAE30</button>` : ""}
+          ${hasNote ? `<button class="action-button${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uBA54\uBAA8 \uBCF4\uAE30</button>` : ""}
+        </div>
+        <div class="decision-row">
+          <button class="decision-button decision-button--again" type="button" data-action="again">\uACF5\uBD80\uD558\uACA0\uC74C</button>
+          <button class="decision-button decision-button--known" type="button" data-action="known">\uC54C\uACE0\uC788\uC74C</button>
+        </div>
       </div>
     </article>
   `;
