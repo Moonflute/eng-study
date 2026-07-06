@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.25";
+const APP_VERSION = "0.0.26";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -36,6 +36,7 @@ const state = {
   gamepadButtons: {},
   progressOpen: false,
   savedListOpen: false,
+  stagePreviewIndex: null,
 };
 
 function defaultScriptText() {
@@ -218,6 +219,7 @@ function routeSnapshot() {
     listeningContinuous: state.listeningContinuous,
     progressOpen: state.progressOpen,
     savedListOpen: state.savedListOpen,
+    stagePreviewIndex: state.stagePreviewIndex,
   };
 }
 
@@ -251,6 +253,7 @@ function applyRouteSnapshot(snapshot) {
   state.listeningContinuous = Boolean(next.listeningContinuous);
   state.progressOpen = Boolean(next.progressOpen);
   state.savedListOpen = Boolean(next.savedListOpen);
+  state.stagePreviewIndex = Number.isFinite(Number(next.stagePreviewIndex)) ? Number(next.stagePreviewIndex) : null;
   resetCardReveal();
   state.scriptRevealed = false;
   render();
@@ -272,6 +275,7 @@ function setRoute(route, options = {}) {
     state.scriptBookmarkMode = false;
   }
   state.savedListOpen = false;
+  state.stagePreviewIndex = null;
   if (!options.skipHistory) syncHistory(Boolean(options.replace));
   render();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -763,7 +767,7 @@ function renderSentenceMode(mode) {
           <h3 class="series-group__title">${title}</h3>
           <div class="series-group__items series-group__items--study legacy-mode-grid">
             <button class="show-item show-item--tile show-item--study" type="button" data-script-start="${mode}">
-              <span class="show-title">01회</span>
+              <span class="show-title">01\uD68C</span>
               <span class="show-meta">${entries.length}\uAC1C \uBB38\uC7A5 \u00B7 \uBCF8 \uBB38\uC7A5 ${seenCount}\uAC1C</span>
             </button>
             <button class="show-item show-item--tile show-item--study" type="button" data-script-bookmarks="${mode}" ${bookmarkCount ? "" : "disabled"}>
@@ -925,24 +929,21 @@ function renderTrackDetail() {
             <h2>${escapeHtml(track.title)}</h2>
             <p>${escapeHtml(track.description || "\uD68C\uB3C5\uBCC4\uB85C \uB098\uB204\uC5B4 \uB2E8\uC77C \uD559\uC2B5\uC744 \uC9C4\uD589\uD569\uB2C8\uB2E4.")}</p>
           </div>
-          <button class="stage-preview-button stage-preview-button--title" type="button" aria-label="\uC804\uCCB4 \uBAA9\uB85D \uBCF4\uAE30">&#9776;</button>
         </div>
       </section>
       <section class="section-card word-stage-panel">
         <div class="stage-list word-stage-list">
           ${stages.map((stage, index) => {
             const complete = isStageComplete(track, stage);
-            const reviewCount = stageReviewCount(track, stage);
             return `
               <div class="stage-row stage-row--day">
-                <div class="stage-button stage-button--day${index === progress.lastStage ? " is-active" : ""}${complete ? " is-complete" : ""}" data-stage-row-index="${index}">
+                <div class="stage-button stage-button--day" data-stage-row-index="${index}">
                   <div class="stage-button__main">
                     <div class="stage-button__head">
                       <div class="stage-button__title">${escapeHtml(stageLabel(stage, index))}</div>
-                      <button class="stage-preview-button stage-preview-button--compact" type="button" aria-label="\uBAA9\uB85D \uBCF4\uAE30">&#9776;</button>
+                      <button class="stage-preview-button stage-preview-button--compact" type="button" data-stage-preview="${index}" aria-label="\uBAA9\uB85D \uBCF4\uAE30">&#9776;</button>
                     </div>
                     <div class="stage-button__meta">\uD559\uC2B5 \uBC94\uC704 ${escapeHtml(stageRangeLabel(stage))}</div>
-                    <div class="stage-button__submeta">\uBCF5\uC2B5 \uD6C4\uBCF4 ${reviewCount}\uAC1C${complete ? " \u00B7 \uC644\uB8CC" : ""}</div>
                   </div>
                   <div class="stage-button__sidebar">
                     <button class="stage-action-button stage-action-button--compact stage-action-button--play" type="button" data-stage-day="${index}" aria-label="\uB2E8\uC77C \uD559\uC2B5 \uC2DC\uC791">&#9654;</button>
@@ -954,8 +955,36 @@ function renderTrackDetail() {
           }).join("")}
         </div>
       </section>
+      ${state.stagePreviewIndex !== null ? renderStagePreviewModal(track, stages[state.stagePreviewIndex], state.stagePreviewIndex) : ""}
     </div>
   `, { home: true });
+}
+
+function renderStagePreviewModal(track, stage, index) {
+  if (!track || !stage) return "";
+  const items = track.items.slice(stage.start, stage.end);
+  return `
+    <div class="modal-backdrop progress-backdrop stage-word-backdrop">
+      <div class="modal-panel section-card stage-word-modal">
+        <div class="progress-modal__head">
+          <div>
+            <div class="progress-modal__title">${escapeHtml(stageLabel(stage, index))}</div>
+            <div class="progress-modal__subtitle">${escapeHtml(track.title)} \u00B7 ${items.length.toLocaleString()}\uAC1C</div>
+          </div>
+          <button class="stage-preview-close" type="button" data-action="stage-preview-close" aria-label="\uBAA9\uB85D \uB2EB\uAE30">&times;</button>
+        </div>
+        <div class="stage-word-table">
+          <div class="stage-word-row stage-word-row--head"><span>\uB2E8\uC5B4</span><span>\uB73B</span></div>
+          ${items.map((item) => `
+            <div class="stage-word-row">
+              <span class="stage-word-term">${escapeHtml(item.primary || "")}</span>
+              <span class="stage-word-meaning">${escapeHtml(item.meaning || "")}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    </div>
+  `;
 }
 function studyStatsForEntries(entries, fallbackTrack = null) {
   let known = 0;
@@ -1404,6 +1433,11 @@ function bindEvents() {
     }
     if (target.dataset.trackId) selectTrack(target.dataset.trackId);
     if (target.dataset.stageDay) startStage(Number(target.dataset.stageDay));
+    if (target.dataset.stagePreview) {
+      state.stagePreviewIndex = Number(target.dataset.stagePreview);
+      render();
+      return;
+    }
     if (target.dataset.stageIndex) selectStage(Number(target.dataset.stageIndex));
     if (target.dataset.scriptIndex) {
       state.scriptIndex = Number(target.dataset.scriptIndex);
@@ -1443,6 +1477,10 @@ function bindEvents() {
     }
     if (action === "progress-close") {
       state.progressOpen = false;
+      render();
+    }
+    if (action === "stage-preview-close") {
+      state.stagePreviewIndex = null;
       render();
     }
     if (action === "saved-list-open") {
