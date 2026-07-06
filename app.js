@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.19";
+const APP_VERSION = "0.0.20";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -353,22 +353,22 @@ function moveScript(delta) {
   render();
 }
 
+function normalizeWordSearch(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function searchResults() {
-  const query = state.query.trim().toLowerCase();
+  const query = normalizeWordSearch(state.query);
   if (!query) return [];
   const results = [];
   for (const track of state.tracks) {
     for (const item of track.items) {
-      const haystack = [item.primary, item.reading, item.meaning, item.exampleJa, item.exampleKo, item.note, item.hint]
-        .join(" ")
-        .toLowerCase();
-      if (haystack.includes(query)) results.push({ track, item });
+      if (normalizeWordSearch(item.primary) === query) results.push({ track, item });
       if (results.length >= 80) return results;
     }
   }
   return results;
 }
-
 function wordTracks() {
   return state.tracks.filter((track) => ["word", "grammar"].includes(normalizeGroup(track.group)) || vocabKind(track) === "toeic" || vocabKind(track) === "toefl");
 }
@@ -530,10 +530,10 @@ function renderWordHome() {
         <div class="section-card japanese-lookup-card">
           <div>
             <div class="lookup-title">\uB2E8\uC5B4 \uAC80\uC0C9</div>
-            <div class="page-subtitle">\uC601\uC5B4\uB098 \uB73B\uC73C\uB85C \uCC3E\uC544\uBCF4\uACE0 \uBC14\uB85C \uBD81\uB9C8\uD06C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.</div>
+            <div class="page-subtitle">\uC601\uC5B4 \uB2E8\uC5B4\uBA85\uC73C\uB85C\uB9CC \uCC3E\uC544\uBCF4\uACE0 \uBC14\uB85C \uBD81\uB9C8\uD06C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.</div>
           </div>
           <div class="lookup-search-row">
-            <input class="lookup-search-input" id="home-search-input" type="search" value="${escapeHtml(state.query)}" placeholder="ex. improve / \uAC1C\uC120\uD558\uB2E4" autocomplete="off" />
+            <input class="lookup-search-input" id="home-search-input" type="search" value="${escapeHtml(state.query)}" placeholder="ex. improve" autocomplete="off" />
             <button class="home-utility-button lookup-search-submit" type="button" data-route="search">\uAC80\uC0C9</button>
           </div>
         </div>
@@ -880,7 +880,7 @@ function renderSearch() {
         </div>
       </div>
       <div class="search-row">
-        <input class="input" id="search-input" value="${escapeHtml(state.query)}" placeholder="\uB2E8\uC5B4, \uB73B, \uC608\uBB38, \uB3D9\uC758\uC5B4 \uAC80\uC0C9" autocomplete="off" />
+        <input class="input" id="search-input" value="${escapeHtml(state.query)}" placeholder="\uC601\uC5B4 \uB2E8\uC5B4\uBA85 \uAC80\uC0C9" autocomplete="off" />
         <button class="btn primary" type="button" data-action="search-focus">\uAC80\uC0C9</button>
       </div>
       <div class="result-list">
@@ -893,7 +893,7 @@ function renderSearch() {
             </div>
             <button class="btn" type="button" data-speak-text="${escapeHtml(item.primary)}">\uBC1C\uC74C</button>
           </div>
-        `).join("") || `<div class="empty">\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>` : `<div class="empty">\uAC80\uC0C9\uC5B4\uB97C \uC785\uB825\uD558\uBA74 \uBAA8\uB4E0 \uC601\uC5B4 \uB2E8\uC5B4\u00B7\uBB38\uBC95 \uD2B8\uB799\uC5D0\uC11C \uCC3E\uC544\uC90D\uB2C8\uB2E4.</div>`}
+        `).join("") || `<div class="empty">\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>` : `<div class="empty">\uC601\uC5B4 \uB2E8\uC5B4\uBA85\uC744 \uC785\uB825\uD558\uBA74 \uB2E8\uC5B4 \uCE74\uB4DC\uC5D0\uC11C \uC815\uD655\uD788 \uAC19\uC740 \uD56D\uBAA9\uB9CC \uCC3E\uC544\uC90D\uB2C8\uB2E4.</div>`}
       </div>
     </section>
   `);
