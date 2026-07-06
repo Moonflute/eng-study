@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.28";
+const APP_VERSION = "0.0.29";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -19,6 +19,8 @@ const state = {
   studyTitle: "",
   customStageKeys: [],
   customBatchSize: 20,
+  customCollapsedGroups: {},
+  customCollapsedTracks: {},
   revealed: false,
   cardReveal: { meaning: false, synonym: false, example: false, exampleKo: false, note: false },
   query: "",
@@ -211,6 +213,8 @@ function routeSnapshot() {
     studyTitle: state.studyTitle,
     customStageKeys: state.customStageKeys,
     customBatchSize: state.customBatchSize,
+    customCollapsedGroups: state.customCollapsedGroups,
+    customCollapsedTracks: state.customCollapsedTracks,
     query: state.query,
     scriptMode: state.scriptMode,
     scriptIndex: state.scriptIndex,
@@ -245,6 +249,8 @@ function applyRouteSnapshot(snapshot) {
   state.studyTitle = next.studyTitle || "";
   state.customStageKeys = Array.isArray(next.customStageKeys) ? next.customStageKeys : [];
   state.customBatchSize = Number(next.customBatchSize || state.customBatchSize || 20);
+  state.customCollapsedGroups = next.customCollapsedGroups && typeof next.customCollapsedGroups === "object" ? next.customCollapsedGroups : {};
+  state.customCollapsedTracks = next.customCollapsedTracks && typeof next.customCollapsedTracks === "object" ? next.customCollapsedTracks : {};
   state.query = next.query || "";
   state.scriptMode = next.scriptMode || state.scriptMode || "reading";
   state.scriptIndex = Number(next.scriptIndex || 0);
@@ -309,8 +315,10 @@ function startStage(index) {
   setRoute("study");
 }
 
-function stageLabel(stage, index) {
+function stageLabel(stage, index, track = null) {
   const label = stage?.label || "";
+  if (track && vocabKind(track) === "toeic") return String(index + 1).padStart(2, "0");
+  if (track && vocabKind(track) === "toefl") return `Day ${String(index + 1).padStart(2, "0")}`;
   if (/^Stage\s*\d+$/i.test(label) || /^Day\s*\d+$/i.test(label)) return `${index + 1}\uD68C\uB3C5`;
   return label || `${index + 1}\uD68C\uB3C5`;
 }
@@ -840,19 +848,31 @@ function renderProgressModal() {
 
 function customSelectGroups() {
   const grouped = new Map();
+  const order = { toeic: 0, toefl: 1, grammar: 2, word: 3 };
   for (const option of allStageOptions()) {
     const kind = normalizeGroup(option.track.group) === "grammar" ? "grammar" : vocabKind(option.track);
-    const groupTitle = groupLabel(kind === "word" ? "word" : kind);
-    if (!grouped.has(groupTitle)) grouped.set(groupTitle, new Map());
-    const tracks = grouped.get(groupTitle);
-    const trackTitle = option.track.title;
-    if (!tracks.has(trackTitle)) tracks.set(trackTitle, []);
-    tracks.get(trackTitle).push(option);
+    const groupKey = kind === "word" ? "word" : kind;
+    const groupTitle = groupLabel(groupKey);
+    if (!grouped.has(groupKey)) grouped.set(groupKey, { groupKey, groupTitle, tracks: new Map() });
+    const group = grouped.get(groupKey);
+    const trackKey = option.track.id;
+    const trackTitle = displayTrackTitle(option.track);
+    if (!group.tracks.has(trackKey)) group.tracks.set(trackKey, { trackKey, trackTitle, options: [] });
+    group.tracks.get(trackKey).options.push(option);
   }
-  return [...grouped.entries()].map(([groupTitle, tracks]) => ({
-    groupTitle,
-    tracks: [...tracks.entries()].map(([trackTitle, options]) => ({ trackTitle, options })),
-  }));
+  return [...grouped.values()]
+    .sort((a, b) => (order[a.groupKey] ?? 99) - (order[b.groupKey] ?? 99))
+    .map((group) => ({
+      groupKey: group.groupKey,
+      groupTitle: group.groupTitle,
+      tracks: [...group.tracks.values()],
+    }));
+}
+
+function toggleCustomCollapse(kind, key) {
+  const store = kind === "group" ? state.customCollapsedGroups : state.customCollapsedTracks;
+  store[key] = !store[key];
+  render();
 }
 function renderTabs() {
   return `
@@ -954,7 +974,7 @@ function renderTrackDetail() {
                 <div class="stage-button stage-button--day" data-stage-row-index="${index}">
                   <div class="stage-button__main">
                     <div class="stage-button__head">
-                      <div class="stage-button__title">${escapeHtml(stageLabel(stage, index))}</div>
+                      <div class="stage-button__title">${escapeHtml(stageLabel(stage, index, track))}</div>
                       <button class="stage-preview-button stage-preview-button--compact" type="button" data-stage-preview="${index}" aria-label="\uBAA9\uB85D \uBCF4\uAE30">&#9776;</button>
                     </div>
                     <div class="stage-button__meta">\uD559\uC2B5 \uBC94\uC704 ${escapeHtml(stageRangeLabel(stage))}</div>
@@ -982,7 +1002,7 @@ function renderStagePreviewModal(track, stage, index) {
       <div class="modal-panel section-card stage-word-modal">
         <div class="progress-modal__head">
           <div>
-            <div class="progress-modal__title">${escapeHtml(stageLabel(stage, index))}</div>
+            <div class="progress-modal__title">${escapeHtml(stageLabel(stage, index, track))}</div>
             <div class="progress-modal__subtitle">${escapeHtml(track.title)} \u00B7 ${items.length.toLocaleString()}\uAC1C</div>
           </div>
           <button class="stage-preview-close" type="button" data-action="stage-preview-close" aria-label="\uBAA9\uB85D \uB2EB\uAE30">&times;</button>
@@ -1016,7 +1036,7 @@ function studyStatsForEntries(entries, fallbackTrack = null) {
 
 function studyRangeText(track, stage, isQueue) {
   if (isQueue) return `\uB9DE\uCDA4 \uBB49\uCE58 \u00B7 ${state.studyTitle || "Custom"}`;
-  return `${escapeHtml(stageRangeLabel(stage))} \u00B7 ${escapeHtml(stageLabel(stage, state.stageIndex))}`;
+  return `${escapeHtml(stageRangeLabel(stage))} \u00B7 ${escapeHtml(stageLabel(stage, state.stageIndex, track))}`;
 }
 function renderStudy() {
   const track = currentTrack();
@@ -1289,29 +1309,38 @@ function renderCustomSelect() {
         <p>\uB2E8\uC77C\uC744 \uACE0\uB974\uACE0 \uD55C \uBC88\uC5D0 \uD559\uC2B5\uC744 \uC2DC\uC791\uD569\uB2C8\uB2E4.</p>
       </section>
       <section class="section-card custom-select-board">
-        ${groups.map((group) => `
-          <section class="custom-select-group">
-            <h3 class="custom-select-group__title">${escapeHtml(group.groupTitle)}</h3>
-            ${group.tracks.map((track) => {
-              const selectedCount = track.options.filter((option) => selected.has(option.key)).length;
-              return `
-                <div class="custom-select-track">
-                  <div class="custom-select-track__head">
-                    <h4>${escapeHtml(track.trackTitle)}</h4>
-                    <span>${selectedCount}/${track.options.length}</span>
+        ${groups.map((group) => {
+          const groupCollapsed = Boolean(state.customCollapsedGroups[group.groupKey]);
+          const groupSelected = group.tracks.reduce((sum, track) => sum + track.options.filter((option) => selected.has(option.key)).length, 0);
+          const groupTotal = group.tracks.reduce((sum, track) => sum + track.options.length, 0);
+          return `
+            <section class="custom-select-group${groupCollapsed ? " is-collapsed" : ""}">
+              <button class="custom-select-group__title" type="button" data-custom-collapse="group:${escapeHtml(group.groupKey)}" aria-expanded="${groupCollapsed ? "false" : "true"}">
+                <span>${escapeHtml(group.groupTitle)}</span>
+                <span>${groupSelected}/${groupTotal}</span>
+              </button>
+              ${groupCollapsed ? "" : group.tracks.map((track) => {
+                const selectedCount = track.options.filter((option) => selected.has(option.key)).length;
+                const trackCollapsed = Boolean(state.customCollapsedTracks[track.trackKey]);
+                return `
+                  <div class="custom-select-track${trackCollapsed ? " is-collapsed" : ""}">
+                    <button class="custom-select-track__head" type="button" data-custom-collapse="track:${escapeHtml(track.trackKey)}" aria-expanded="${trackCollapsed ? "false" : "true"}">
+                      <h4>${escapeHtml(track.trackTitle)}</h4>
+                      <span>${selectedCount}/${track.options.length}</span>
+                    </button>
+                    ${trackCollapsed ? "" : `<div class="custom-stage-chip-grid">
+                      ${track.options.map((option, index) => `
+                        <button class="custom-stage-chip${selected.has(option.key) ? " is-active" : ""}${option.percent >= 100 ? " is-complete" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
+                          ${String(index + 1).padStart(2, "0")}
+                        </button>
+                      `).join("")}
+                    </div>`}
                   </div>
-                  <div class="custom-stage-chip-grid">
-                    ${track.options.map((option, index) => `
-                      <button class="custom-stage-chip${selected.has(option.key) ? " is-active" : ""}${option.percent >= 100 ? " is-complete" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
-                        ${String(index + 1).padStart(2, "0")}
-                      </button>
-                    `).join("")}
-                  </div>
-                </div>
-              `;
-            }).join("")}
-          </section>
-        `).join("")}
+                `;
+              }).join("")}
+            </section>
+          `;
+        }).join("")}
       </section>
       <section class="section-card custom-select-footer">
         <div class="custom-select-summary">
@@ -1517,6 +1546,11 @@ function bindEvents() {
     if (action === "custom-saved") startSavedStudy();
     if (action === "custom-selected") startSelectedStudy();
     if (action === "clear-saved") clearSavedItems();
+    if (target.dataset.customCollapse) {
+      const [kind, key] = target.dataset.customCollapse.split(":");
+      toggleCustomCollapse(kind, key);
+      return;
+    }
     if (target.dataset.customStage) toggleCustomStage(target.dataset.customStage);
     if (action === "reveal") toggleCardReveal("meaning");
     if (action === "prev") moveCard(-1);
