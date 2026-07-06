@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.26";
+const APP_VERSION = "0.0.27";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -872,12 +872,26 @@ function libraryTracks(group = state.group, limit = Infinity) {
     .slice(0, limit);
 }
 
+function displayTrackTitle(track) {
+  const kind = vocabKind(track);
+  if (kind === "toeic") {
+    return track.title
+      .replace(/^TOEIC\s*/i, "")
+      .replace(/^800$/, "800+")
+      .replace(/^900$/, "900+");
+  }
+  if (kind === "toefl") {
+    if (track.id === "eng-word-green-main") return "\uBA54\uC778\uB2E8\uC5B4";
+    if (track.id === "eng-word-green-sub") return "\uC720\uC758\uC5B4";
+  }
+  return track.title;
+}
 function renderLibrarySection(group = state.group, limit = Infinity) {
   const tracks = libraryTracks(group, limit);
 
   return `
     <section class="section-card word-list-panel">
-      <div class="type-list word-type-list">
+      <div class="type-list word-type-list${["toeic", "toefl"].includes(group) ? " word-type-list--exam" : ""}">
         ${tracks.length ? tracks.map(renderTrackCard).join("") : `<div class="empty">\uD45C\uC2DC\uD560 \uC601\uC5B4 \uD2B8\uB799\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
       </div>
     </section>
@@ -889,7 +903,7 @@ function renderTrackCard(track) {
   const active = track.id === state.trackId;
   return `
     <button class="type-button word-type-card${active ? " is-active" : ""}" type="button" data-track-id="${escapeHtml(track.id)}">
-      <div class="type-button__title">${escapeHtml(track.title)}</div>
+      <div class="type-button__title">${escapeHtml(displayTrackTitle(track))}</div>
       <div class="type-button__meta">${track.total.toLocaleString()}\uAC1C \u00B7 \uC54C\uACE0\uC788\uC74C ${(progress.known || []).length.toLocaleString()} \u00B7 \uACF5\uBD80\uD558\uACA0\uC74C ${(progress.again || []).length.toLocaleString()}</div>
     </button>
   `;
