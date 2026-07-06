@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.24";
+const APP_VERSION = "0.0.25";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -20,6 +20,7 @@ const state = {
   customStageKeys: [],
   customBatchSize: 20,
   revealed: false,
+  cardReveal: { meaning: false, synonym: false, example: false, exampleKo: false, note: false },
   query: "",
   scriptText: localStorage.getItem(SCRIPT_STORAGE_KEY) || defaultScriptText(),
   scriptMode: "reading",
@@ -250,7 +251,7 @@ function applyRouteSnapshot(snapshot) {
   state.listeningContinuous = Boolean(next.listeningContinuous);
   state.progressOpen = Boolean(next.progressOpen);
   state.savedListOpen = Boolean(next.savedListOpen);
-  state.revealed = false;
+  resetCardReveal();
   state.scriptRevealed = false;
   render();
   window.scrollTo({ top: 0, behavior: "auto" });
@@ -264,7 +265,7 @@ function initHistory() {
 
 function setRoute(route, options = {}) {
   state.route = route;
-  state.revealed = false;
+  resetCardReveal();
   state.scriptRevealed = false;
   if (route !== "script") {
     state.readingFull = false;
@@ -290,7 +291,7 @@ function selectTrack(trackId) {
 function selectStage(index) {
   state.stageIndex = index;
   state.cardIndex = 0;
-  state.revealed = false;
+  resetCardReveal();
   const track = currentTrack();
   if (track) {
     ensureTrackProgress(track.id).lastStage = index;
@@ -331,16 +332,26 @@ function isStageComplete(track, stage) {
   const items = track.items.slice(stage.start, stage.end);
   return Boolean(items.length) && items.every((item) => known.has(item.id) || checked.has(item.id));
 }
+function resetCardReveal() {
+  state.cardReveal = { meaning: false, synonym: false, example: false, exampleKo: false, note: false };
+  state.revealed = false;
+}
+
+function toggleCardReveal(key) {
+  state.cardReveal = { ...state.cardReveal, [key]: !state.cardReveal?.[key] };
+  state.revealed = Object.values(state.cardReveal).some(Boolean);
+  render();
+}
 function moveCard(delta) {
   if (Array.isArray(state.studyQueue)) {
     state.queueIndex = Math.min(Math.max(0, state.queueIndex + delta), Math.max(0, state.studyQueue.length - 1));
-    state.revealed = false;
+    resetCardReveal();
     render();
     return;
   }
   const items = currentItems();
   state.cardIndex = Math.min(Math.max(0, state.cardIndex + delta), Math.max(0, items.length - 1));
-  state.revealed = false;
+  resetCardReveal();
   render();
 }
 
@@ -433,6 +444,52 @@ function searchResults() {
   }
   return results;
 }
+function checkedVocabularyKeys() {
+  const keys = new Set();
+  for (const track of state.tracks.filter(isVocabularyTrack)) {
+    const progress = ensureTrackProgress(track.id);
+    for (const itemId of progress.checked || []) keys.add(`${track.id}::${itemId}`);
+  }
+  return keys;
+}
+
+function scriptFootnotesFor(text) {
+  const source = String(text || "").toLowerCase();
+  if (!source) return [];
+  const checked = checkedVocabularyKeys();
+  const seen = new Set();
+  const notes = [];
+  for (const track of state.tracks.filter(isVocabularyTrack)) {
+    for (const item of track.items) {
+      const term = String(item.primary || "").trim();
+      if (term.length < 3) continue;
+      const key = `${track.id}::${item.id}`;
+      const normalized = term.toLowerCase();
+      if (checked.has(key) || seen.has(normalized)) continue;
+      if (source.includes(normalized)) {
+        seen.add(normalized);
+        notes.push({ term, meaning: item.meaning || "", track: track.title });
+        if (notes.length >= 8) return notes;
+      }
+    }
+  }
+  return notes;
+}
+
+function renderScriptFootnotes(text) {
+  const notes = scriptFootnotesFor(text);
+  if (!notes.length) return "";
+  return `
+    <div class="script-footnotes">
+      ${notes.map((note) => `
+        <span class="script-footnote">
+          <strong>${escapeHtml(note.term)}</strong>
+          <span>${escapeHtml(note.meaning)}</span>
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
 function wordTracks() {
   return state.tracks.filter((track) => ["word", "grammar"].includes(normalizeGroup(track.group)) || vocabKind(track) === "toeic" || vocabKind(track) === "toefl");
 }
@@ -482,7 +539,7 @@ function startQueue(entries, title) {
   state.queueIndex = 0;
   state.cardIndex = 0;
   state.studyTitle = title;
-  state.revealed = false;
+  resetCardReveal();
   setRoute("study");
 }
 
@@ -888,7 +945,7 @@ function renderTrackDetail() {
                     <div class="stage-button__submeta">\uBCF5\uC2B5 \uD6C4\uBCF4 ${reviewCount}\uAC1C${complete ? " \u00B7 \uC644\uB8CC" : ""}</div>
                   </div>
                   <div class="stage-button__sidebar">
-                    <button class="stage-action-button stage-action-button--compact" type="button" data-stage-day="${index}">\uB2E8\uC77C</button>
+                    <button class="stage-action-button stage-action-button--compact stage-action-button--play" type="button" data-stage-day="${index}" aria-label="\uB2E8\uC77C \uD559\uC2B5 \uC2DC\uC791">&#9654;</button>
                     ${complete ? `<span class="stage-badge">\uC644\uB8CC</span>` : ""}
                   </div>
                 </div>
@@ -964,17 +1021,27 @@ function renderStudy() {
         </div>
       </section>
       <section class="section-card card-frame">
-        ${item ? renderStudyCard(item, itemNumber, items.length, saved, checked) : `<div class="empty">\uD559\uC2B5\uD560 \uCE74\uB4DC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
+        ${item ? renderStudyCard(item, itemNumber, items.length, saved, checked, track) : `<div class="empty">\uD559\uC2B5\uD560 \uCE74\uB4DC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
       </section>
     </div>
   `, { home: true });
 }
-function renderStudyCard(item, current, total, saved, checked) {
-  const hasExample = Boolean(item.exampleJa || item.exampleKo);
-  const hasNote = Boolean(item.note || item.hint);
-  const exampleJa = state.revealed && item.exampleJa ? escapeHtml(item.exampleJa) : "&nbsp;";
-  const exampleKo = state.revealed && item.exampleKo ? escapeHtml(item.exampleKo) : "&nbsp;";
-  const noteText = state.revealed && hasNote ? escapeHtml([item.note, item.hint].filter(Boolean).join(" / ")) : "";
+function synonymText(item) {
+  if (Array.isArray(item.synonyms)) return item.synonyms.filter(Boolean).join(" / ");
+  return [item.note, item.hint].filter(Boolean).join(" / ");
+}
+
+function renderStudyCard(item, current, total, saved, checked, track) {
+  const reveal = state.cardReveal || {};
+  const kind = vocabKind(track || currentTrack());
+  const isToefl = kind === "toefl";
+  const hasExampleEn = Boolean(item.exampleJa);
+  const hasExampleKo = Boolean(item.exampleKo);
+  const synonym = synonymText(item);
+  const meaningVisible = Boolean(reveal.meaning);
+  const synonymVisible = Boolean(reveal.synonym && isToefl && synonym);
+  const exampleVisible = Boolean(reveal.example && hasExampleEn);
+  const exampleKoVisible = Boolean(reveal.exampleKo && hasExampleKo);
 
   return `
     <div class="card-panel">
@@ -982,21 +1049,22 @@ function renderStudyCard(item, current, total, saved, checked) {
       <button class="card-check-button${checked ? " is-active" : ""}" type="button" data-action="check" aria-label="${checked ? "\uCCB4\uD06C \uD574\uC81C" : "\uCCB4\uD06C \uC800\uC7A5"}">&#9989;</button>
       <button class="card-bookmark-button${saved ? " is-active" : ""}" type="button" data-action="save" aria-label="${saved ? "\uC800\uC7A5 \uD574\uC81C" : "\uC800\uC7A5"}">&#128278;</button>
       <div class="card-primary">${escapeHtml(item.primary)}</div>
-      <div class="card-slot card-meaning${state.revealed ? "" : " is-empty"}">${state.revealed ? escapeHtml(item.meaning || "") : "&nbsp;"}</div>
-      <div class="card-slot card-choice${noteText ? "" : " is-empty"}">${noteText || "&nbsp;"}</div>
+      <div class="card-slot card-meaning${meaningVisible ? "" : " is-empty"}">${meaningVisible ? escapeHtml(item.meaning || "") : "&nbsp;"}</div>
+      <div class="card-slot card-choice${synonymVisible ? "" : " is-empty"}">${synonymVisible ? escapeHtml(synonym) : "&nbsp;"}</div>
       <div class="card-example-shell">
-        <div class="card-example${state.revealed && item.exampleJa ? "" : " is-empty"}">${exampleJa}</div>
-        <div class="card-example card-example--ko${state.revealed && item.exampleKo ? "" : " is-empty"}">${exampleKo}</div>
+        <div class="card-example${exampleVisible ? "" : " is-empty"}">${exampleVisible ? escapeHtml(item.exampleJa || "") : "&nbsp;"}</div>
+        <div class="card-example card-example--ko${exampleKoVisible ? "" : " is-empty"}">${exampleKoVisible ? escapeHtml(item.exampleKo || "") : "&nbsp;"}</div>
       </div>
     </div>
     <div class="action-stack">
-      <div class="action-row action-row--primary">
-        <button class="action-button${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uB73B \uBCF4\uAE30</button>
+      <div class="action-row ${isToefl ? "action-row--two" : "action-row--primary"}">
+        <button class="action-button${meaningVisible ? " is-active" : ""}" type="button" data-card-reveal="meaning">\uB73B \uBCF4\uAE30</button>
+        ${isToefl ? `<button class="action-button action-button--secondary${synonymVisible ? " is-active" : ""}" type="button" data-card-reveal="synonym" ${synonym ? "" : "disabled"}>\uC720\uC758\uC5B4 \uBCF4\uAE30</button>` : ""}
       </div>
-      ${hasExample ? `<div class="action-row action-row--examples">
-        <button class="action-button action-button--secondary${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uC608\uBB38 \uBCF4\uAE30</button>
-        ${hasNote ? `<button class="action-button action-button--secondary${state.revealed ? " is-active" : ""}" type="button" data-action="reveal">\uBA54\uBAA8 \uBCF4\uAE30</button>` : ""}
-      </div>` : ""}
+      <div class="action-row action-row--two action-row--examples">
+        <button class="action-button action-button--secondary${exampleVisible ? " is-active" : ""}" type="button" data-card-reveal="example" ${hasExampleEn ? "" : "disabled"}>\uC608\uBB38</button>
+        <button class="action-button action-button--secondary${exampleKoVisible ? " is-active" : ""}" type="button" data-card-reveal="exampleKo" ${hasExampleKo ? "" : "disabled"}>\uC608\uBB38 \uD574\uC11D</button>
+      </div>
       <div class="decision-row">
         <button class="decision-button decision-button--again" type="button" data-action="again">\uACF5\uBD80\uD558\uACA0\uC74C</button>
         <button class="decision-button decision-button--known" type="button" data-action="known">\uC54C\uACE0\uC788\uC74C</button>
@@ -1004,7 +1072,6 @@ function renderStudyCard(item, current, total, saved, checked) {
     </div>
   `;
 }
-
 function renderSearch() {
   const results = searchResults();
   renderShell(`
@@ -1076,6 +1143,7 @@ function renderScript() {
     <section class="reading-full__item">
       <p class="reading-full__sentence">${escapeHtml(entry.text)}</p>
       ${entry.translation ? `<p class="reading-full__translation">${escapeHtml(entry.translation)}</p>` : ""}
+      ${renderScriptFootnotes(entry.text)}
     </section>
   `).join("");
 
@@ -1102,6 +1170,7 @@ function renderScript() {
               <div class="player-time">${entries.length ? `${(state.scriptBookmarkMode ? activePosition : state.scriptIndex) + 1} / ${state.scriptBookmarkMode ? activeIndices.length : entries.length}` : "0 / 0"}</div>
               <div class="current-sentence listening-sentence">${escapeHtml(current?.text || "")}</div>
               <div class="current-translation listening-translation">${escapeHtml(current?.translation || "")}</div>
+              ${renderScriptFootnotes(current?.text || "")}
               <button class="home-utility-button listening-speak-button" type="button" data-action="script-speak">\uD604\uC7AC \uBB38\uC7A5 \uB4E3\uAE30</button>
             </div>
           </section>
@@ -1115,6 +1184,7 @@ function renderScript() {
             <button class="sentence-nav sentence-nav--next reading-nav${state.readingFull ? " is-hidden" : ""}" type="button" data-action="script-next" aria-label="\uB2E4\uC74C \uBB38\uC7A5"><span class="sentence-nav__icon">&gt;</span></button>
             <div class="current-sentence reading-sentence">${state.readingFull ? `<article class="reading-full"><h3 class="reading-full__title">${title}</h3>${fullItems}</article>` : escapeHtml(current?.text || "")}</div>
             <div class="current-translation reading-extra">${revealed && !state.readingFull ? escapeHtml(current?.translation || current?.text || "") : ""}</div>
+            ${!state.readingFull ? renderScriptFootnotes(current?.text || "") : ""}
           </section>
           <div class="floating-actions reading-actions">
             <label class="reveal-toggle"><input type="checkbox" data-action="reading-reveal" ${state.scriptRevealed ? "checked" : ""}> \uD574\uC11D</label>
@@ -1262,8 +1332,7 @@ function handleGamepadStudyAction(action) {
     return;
   }
   if (action === "meaning") {
-    state.revealed = true;
-    render();
+    toggleCardReveal("meaning");
     return;
   }
   if (action === "speak") {
@@ -1354,6 +1423,10 @@ function bindEvents() {
       renderSearch();
       return;
     }
+    if (target.dataset.cardReveal) {
+      toggleCardReveal(target.dataset.cardReveal);
+      return;
+    }
     if (target.dataset.unsaveItem) {
       const [trackId, itemId] = target.dataset.unsaveItem.split("::");
       const progress = ensureTrackProgress(trackId);
@@ -1393,10 +1466,7 @@ function bindEvents() {
     if (action === "custom-selected") startSelectedStudy();
     if (action === "clear-saved") clearSavedItems();
     if (target.dataset.customStage) toggleCustomStage(target.dataset.customStage);
-    if (action === "reveal") {
-      state.revealed = true;
-      render();
-    }
+    if (action === "reveal") toggleCardReveal("meaning");
     if (action === "prev") moveCard(-1);
     if (action === "next") moveCard(1);
     if (action === "speak") speak(currentItem()?.primary || "");
@@ -1460,7 +1530,7 @@ function bindEvents() {
     if (event.target.matches("textarea, input")) return;
     if (event.key === " ") {
       event.preventDefault();
-      if (state.route === "study") state.revealed ? speak(currentItem()?.primary || "") : (state.revealed = true, render());
+      if (state.route === "study") state.revealed ? speak(currentItem()?.primary || "") : toggleCardReveal("meaning");
       if (state.route === "script") state.scriptRevealed ? speak(scriptEntries()[state.scriptIndex]?.text || "") : (state.scriptRevealed = true, render());
     }
     if (event.key === "ArrowLeft") state.route === "script" ? moveScript(-1) : moveCard(-1);

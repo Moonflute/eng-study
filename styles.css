@@ -136,7 +136,7 @@ button {
   max-width: 620px;
   margin: 16px 0 0;
   color: rgba(255, 250, 242, 0.82);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.65;
 }
 
@@ -831,7 +831,7 @@ button {
 .legacy-title-card p {
   margin: 0 0 18px;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -932,7 +932,7 @@ button {
 
 .custom-option-card span {
   color: var(--muted);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -1071,7 +1071,7 @@ button {
 
 .main-home-card__meta {
   color: var(--muted);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.4;
 }
@@ -1179,7 +1179,7 @@ button {
 .page-subtitle {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -1368,7 +1368,7 @@ button {
 .word-flow-title-card p {
   margin: 0;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 650;
   line-height: 1.45;
 }
@@ -1539,7 +1539,7 @@ button {
   .word-type-card .type-button__meta,
   .stage-button__meta,
   .stage-button__submeta {
-    font-size: 16px;
+    font-size: 14px;
   }
 }
 /* Compact word home: fixed phone viewport, no graph button, 2x2 categories */
@@ -1776,7 +1776,7 @@ button {
 
 .progress-track__head strong {
   color: var(--ink);
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .progress-cells {
@@ -2134,7 +2134,7 @@ button {
 .card-note {
   max-width: 620px;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -2322,7 +2322,7 @@ button {
 .study-info-card .study-stat-chip strong {
   margin-left: 6px;
   color: var(--ink);
-  font-size: 16px;
+  font-size: 14px;
 }
 
 @media (max-width: 520px) {
@@ -2592,5 +2592,144 @@ button {
 
   .reading-panel.is-full-view {
     padding: 12px 18px 80px;
+  }
+}
+/* Local adjustment pass: bunch list and study card ergonomics */
+.legacy-screen,
+.word-flow-screen {
+  position: relative;
+}
+
+.home-nav-row,
+.word-topbar.topbar--home {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 12;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.home-nav-row {
+  display: flex;
+}
+
+.home-pill,
+.word-topbar .back-button {
+  min-width: 46px;
+  min-height: 46px;
+  padding: 0 12px;
+  border-radius: 18px;
+  background: rgba(255, 253, 248, 0.9);
+}
+
+.word-flow-title-card,
+.study-info-card,
+.legacy-title-card--mode {
+  margin-top: 0;
+}
+
+.word-title-row {
+  grid-template-columns: minmax(0, 1fr) 34px;
+}
+
+.stage-preview-button--title,
+.stage-preview-button--compact {
+  width: 29px;
+  height: 29px;
+  min-width: 29px;
+  font-size: 15px;
+  box-shadow: 0 4px 10px rgba(29, 37, 37, 0.05);
+}
+
+.stage-button--day {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 62px;
+  min-height: 122px;
+  gap: 10px;
+  padding: 16px;
+}
+
+.stage-button__title {
+  font-size: clamp(20px, 4.4vw, 24px);
+  line-height: 1.15;
+}
+
+.stage-button__meta,
+.stage-button__submeta {
+  font-size: 14px;
+}
+
+.stage-button__meta {
+  margin-top: 16px;
+}
+
+.stage-action-button {
+  min-height: 34px;
+  border-radius: 999px;
+  font-size: 15px;
+}
+
+.stage-action-button--play {
+  display: grid;
+  width: 34px;
+  min-width: 34px;
+  place-items: center;
+  justify-self: end;
+  padding: 0;
+  font-size: 14px;
+}
+
+.card-primary {
+  font-size: clamp(26px, 6.4vw, 44px);
+}
+
+.action-row--two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.action-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.script-footnotes {
+  max-width: min(760px, calc(100% - 90px));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.script-footnote {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid rgba(194, 226, 220, 0.9);
+  border-radius: 999px;
+  background: rgba(229, 248, 245, 0.9);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.script-footnote strong {
+  color: var(--brand);
+}
+
+@media (max-width: 620px) {
+  .stage-button--day {
+    grid-template-columns: minmax(0, 1fr) 54px;
+  }
+
+  .stage-action-button--play {
+    justify-self: center;
   }
 }
