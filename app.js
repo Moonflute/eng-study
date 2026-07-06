@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.20";
+const APP_VERSION = "0.0.21";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const SOURCE_URL = "./data/english-source.json";
@@ -357,13 +357,19 @@ function normalizeWordSearch(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isVocabularyTrack(track) {
+  return normalizeGroup(track.group) === "word" || vocabKind(track) === "toeic" || vocabKind(track) === "toefl";
+}
+
 function searchResults() {
   const query = normalizeWordSearch(state.query);
   if (!query) return [];
   const results = [];
-  for (const track of state.tracks) {
+  for (const track of state.tracks.filter(isVocabularyTrack)) {
     for (const item of track.items) {
-      if (normalizeWordSearch(item.primary) === query) results.push({ track, item });
+      const primary = normalizeWordSearch(item.primary);
+      const meaning = normalizeWordSearch(item.meaning);
+      if (primary.includes(query) || meaning.includes(query)) results.push({ track, item });
       if (results.length >= 80) return results;
     }
   }
@@ -880,7 +886,7 @@ function renderSearch() {
         </div>
       </div>
       <div class="search-row">
-        <input class="input" id="search-input" value="${escapeHtml(state.query)}" placeholder="\uC601\uC5B4 \uB2E8\uC5B4\uBA85 \uAC80\uC0C9" autocomplete="off" />
+        <input class="input" id="search-input" value="${escapeHtml(state.query)}" placeholder="\uC601\uC5B4 \uB2E8\uC5B4\uB098 \uB73B \uAC80\uC0C9" autocomplete="off" />
         <button class="btn primary" type="button" data-action="search-focus">\uAC80\uC0C9</button>
       </div>
       <div class="result-list">
@@ -889,11 +895,10 @@ function renderSearch() {
             <div>
               <strong>${escapeHtml(item.primary)} <span class="eyebrow">${escapeHtml(track.title)}</span></strong>
               <div>${escapeHtml(item.meaning || "")}</div>
-              ${item.exampleJa ? `<p>${escapeHtml(item.exampleJa)}</p>` : ""}
             </div>
             <button class="btn" type="button" data-speak-text="${escapeHtml(item.primary)}">\uBC1C\uC74C</button>
           </div>
-        `).join("") || `<div class="empty">\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>` : `<div class="empty">\uC601\uC5B4 \uB2E8\uC5B4\uBA85\uC744 \uC785\uB825\uD558\uBA74 \uB2E8\uC5B4 \uCE74\uB4DC\uC5D0\uC11C \uC815\uD655\uD788 \uAC19\uC740 \uD56D\uBAA9\uB9CC \uCC3E\uC544\uC90D\uB2C8\uB2E4.</div>`}
+        `).join("") || `<div class="empty">\uAC80\uC0C9 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>` : `<div class="empty">\uB2E8\uC5B4 \uD2B8\uB799\uC758 \uC601\uC5B4\uC640 \uB73B\uC5D0\uC11C\uB9CC \uCC3E\uC544\uC90D\uB2C8\uB2E4.</div>`}
       </div>
     </section>
   `);
