@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.31";
+const APP_VERSION = "0.0.32";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -673,19 +673,15 @@ function renderWordHome() {
         <div class="grid-2 grid-2--word-home" aria-label="\uB2E8\uC5B4 \uC139\uC158">
           <button class="big-button" type="button" data-vocab-kind="toeic" data-route="library">
             <div class="big-button__title">\uD1A0\uC775</div>
-            <div class="big-button__desc">${toeic.length}\uAC1C \uD2B8\uB799 \u00B7 ${toeicCards.toLocaleString()}\uAC1C</div>
           </button>
           <button class="big-button" type="button" data-vocab-kind="toefl" data-route="library">
             <div class="big-button__title">\uD1A0\uD50C</div>
-            <div class="big-button__desc">${toefl.length}\uAC1C \uD2B8\uB799 \u00B7 ${toeflCards.toLocaleString()}\uAC1C</div>
           </button>
           <button class="big-button" type="button" data-group="grammar" data-route="library">
             <div class="big-button__title">\uBB38\uBC95</div>
-            <div class="big-button__desc">${grammar.tracks.length}\uAC1C \uD2B8\uB799</div>
           </button>
           <button class="big-button big-button--accent" type="button" data-route="custom">
             <div class="big-button__title">\uB9DE\uCDA4</div>
-            <div class="big-button__desc">\uC9C4\uD589 \u00B7 \uC120\uD0DD \u00B7 \uC800\uC7A5 ${savedCount.toLocaleString()}\uAC1C</div>
           </button>
         </div>
       </div>
@@ -921,10 +917,14 @@ function renderLibrarySection(group = state.group, limit = Infinity) {
 function renderTrackCard(track) {
   const progress = ensureTrackProgress(track.id);
   const active = track.id === state.trackId;
+  const kind = vocabKind(track);
+  const meta = ["toeic", "toefl"].includes(kind)
+    ? `${track.total.toLocaleString()}\uAC1C`
+    : `${track.total.toLocaleString()}\uAC1C \u00B7 \uC54C\uACE0\uC788\uC74C ${(progress.known || []).length.toLocaleString()} \u00B7 \uACF5\uBD80\uD558\uACA0\uC74C ${(progress.again || []).length.toLocaleString()}`;
   return `
     <button class="type-button word-type-card${active ? " is-active" : ""}" type="button" data-track-id="${escapeHtml(track.id)}">
       <div class="type-button__title">${escapeHtml(displayTrackTitle(track))}</div>
-      <div class="type-button__meta">${track.total.toLocaleString()}\uAC1C \u00B7 \uC54C\uACE0\uC788\uC74C ${(progress.known || []).length.toLocaleString()} \u00B7 \uACF5\uBD80\uD558\uACA0\uC74C ${(progress.again || []).length.toLocaleString()}</div>
+      <div class="type-button__meta">${meta}</div>
     </button>
   `;
 }

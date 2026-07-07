@@ -3170,3 +3170,35 @@ button {
     --menu-square-gap: 12px;
   }
 }
+/* Final alignment overrides */
+.home-menu--root,
+.grid-2--word-home,
+.word-type-list {
+  grid-template-columns: repeat(2, var(--menu-square-size)) !important;
+  justify-items: center;
+  gap: var(--menu-square-gap) !important;
+}
+
+.topbar--home,
+.home-nav-row,
+.word-topbar.topbar--home {
+  justify-content: flex-start;
+}
+
+.topbar--home .home-icon-button {
+  margin-left: auto;
+}
+.word-home-compact .grid-2--word-home {
+  grid-template-columns: repeat(2, var(--menu-square-size)) !important;
+  justify-content: center;
+  justify-items: center;
+  gap: var(--menu-square-gap) !important;
+}
+
+.word-home-compact .grid-2--word-home .big-button {
+  width: var(--menu-square-size);
+  height: var(--menu-square-size);
+  min-height: 0;
+  padding: 18px 14px;
+  border-radius: 30px;
+}
