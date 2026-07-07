@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.35";
+const APP_VERSION = "0.0.36";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -19,6 +19,7 @@ const state = {
   studyTitle: "",
   customStageKeys: [],
   customBatchSize: 20,
+  customExcludeChecked: false,
   customCollapsedGroups: {},
   customCollapsedTracks: {},
   revealed: false,
@@ -213,6 +214,7 @@ function routeSnapshot() {
     studyTitle: state.studyTitle,
     customStageKeys: state.customStageKeys,
     customBatchSize: state.customBatchSize,
+    customExcludeChecked: state.customExcludeChecked,
     customCollapsedGroups: state.customCollapsedGroups,
     customCollapsedTracks: state.customCollapsedTracks,
     query: state.query,
@@ -249,6 +251,7 @@ function applyRouteSnapshot(snapshot) {
   state.studyTitle = next.studyTitle || "";
   state.customStageKeys = Array.isArray(next.customStageKeys) ? next.customStageKeys : [];
   state.customBatchSize = Number(next.customBatchSize || state.customBatchSize || 20);
+  state.customExcludeChecked = Boolean(next.customExcludeChecked);
   state.customCollapsedGroups = next.customCollapsedGroups && typeof next.customCollapsedGroups === "object" ? next.customCollapsedGroups : {};
   state.customCollapsedTracks = next.customCollapsedTracks && typeof next.customCollapsedTracks === "object" ? next.customCollapsedTracks : {};
   state.query = next.query || "";
@@ -575,10 +578,16 @@ function toggleCustomStage(key) {
   render();
 }
 
+function isCheckedQueueEntry(entry) {
+  return ensureTrackProgress(entry.trackId).checked.includes(entry.itemId);
+}
+
 function startSelectedStudy() {
   const selected = new Set(state.customStageKeys);
   const options = allStageOptions().filter((option) => selected.has(option.key));
-  const entries = queueFromStageOptions(options).slice(0, Math.max(1, state.customBatchSize || 20));
+  const entries = queueFromStageOptions(options)
+    .filter((entry) => !state.customExcludeChecked || !isCheckedQueueEntry(entry))
+    .slice(0, Math.max(1, state.customBatchSize || 20));
   startQueue(entries, "\uC120\uD0DD");
 }
 
@@ -1336,7 +1345,8 @@ function renderCustomSelect() {
   const groups = customSelectGroups();
   const selected = new Set(state.customStageKeys);
   const selectedOptions = allStageOptions().filter((option) => selected.has(option.key));
-  const selectedCards = selectedOptions.reduce((sum, option) => sum + option.total, 0);
+  const selectedEntries = queueFromStageOptions(selectedOptions).filter((entry) => !state.customExcludeChecked || !isCheckedQueueEntry(entry));
+  const selectedCards = selectedEntries.length;
   renderShell(`
     <div class="legacy-screen custom-select-screen">
       <div class="home-nav-row custom-select-nav">
@@ -1389,8 +1399,8 @@ function renderCustomSelect() {
           <button class="stage-preview-filter" type="button" data-action="custom-clear" ${selected.size ? "" : "disabled"}>\uD574\uC81C</button>
           <button class="stage-preview-filter${state.customBatchSize === 7 ? " is-active" : ""}" type="button" data-custom-batch="7">7\uAC1C</button>
           <button class="stage-preview-filter${state.customBatchSize === 20 ? " is-active" : ""}" type="button" data-custom-batch="20">20\uAC1C</button>
-          <button class="stage-preview-filter" type="button">v \uD3EC\uD568</button>
-          <button class="big-button big-button--accent custom-select-start" type="button" data-action="custom-selected" ${selected.size ? "" : "disabled"}>
+          <button class="stage-preview-filter${state.customExcludeChecked ? " is-active" : ""}" type="button" data-action="custom-toggle-checked" aria-pressed="${state.customExcludeChecked ? "true" : "false"}">v \uD3EC\uD568</button>
+          <button class="big-button big-button--accent custom-select-start" type="button" data-action="custom-selected" ${selected.size && selectedCards ? "" : "disabled"}>
             <div class="big-button__title">\uC2DC\uC791</div>
           </button>
         </div>
@@ -1577,10 +1587,17 @@ function bindEvents() {
     if (action === "custom-clear") {
       state.customStageKeys = [];
       render();
+      return;
+    }
+    if (action === "custom-toggle-checked") {
+      state.customExcludeChecked = !state.customExcludeChecked;
+      render();
+      return;
     }
     if (target.dataset.customBatch) {
       state.customBatchSize = Number(target.dataset.customBatch) || 20;
       render();
+      return;
     }
     if (action === "custom-progress") startProgressStudy();
     if (action === "custom-saved") startSavedStudy();
