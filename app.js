@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.33";
+const APP_VERSION = "0.0.34";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -846,6 +846,7 @@ function customSelectGroups() {
   const grouped = new Map();
   const order = { toeic: 0, toefl: 1, grammar: 2, word: 3 };
   for (const option of allStageOptions()) {
+    if (normalizeGroup(option.track.group) === "grammar") continue;
     const kind = normalizeGroup(option.track.group) === "grammar" ? "grammar" : vocabKind(option.track);
     const groupKey = kind === "word" ? "word" : kind;
     const groupTitle = groupLabel(groupKey);
