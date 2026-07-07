@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.29";
+const APP_VERSION = "0.0.30";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -911,7 +911,7 @@ function renderLibrarySection(group = state.group, limit = Infinity) {
 
   return `
     <section class="section-card word-list-panel">
-      <div class="type-list word-type-list${["toeic", "toefl"].includes(group) ? " word-type-list--exam" : ""}">
+      <div class="type-list word-type-list">
         ${tracks.length ? tracks.map(renderTrackCard).join("") : `<div class="empty">\uD45C\uC2DC\uD560 \uC601\uC5B4 \uD2B8\uB799\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
       </div>
     </section>
