@@ -1,7 +1,7 @@
 {
   "name": "english-study-lab",
   "private": true,
-  "version": "0.0.34",
+  "version": "0.0.35",
   "type": "module",
   "scripts": {
     "dev": "node ./scripts/serve.mjs",

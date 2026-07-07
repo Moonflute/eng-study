@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.34";
+const APP_VERSION = "0.0.35";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1474,7 +1474,7 @@ function pollGamepad() {
       [0, "known"],
       [1, "meaning"],
       [2, "again"],
-      [3, "speak"],
+      [3, "check"],
       [4, "prev"],
       [5, "bookmark"],
       [6, "next"],
