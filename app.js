@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.30";
+const APP_VERSION = "0.0.31";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
