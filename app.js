@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.32";
+const APP_VERSION = "0.0.33";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1294,6 +1294,43 @@ function renderCustomMenu() {
   `, { home: true });
 }
 
+
+function renderSavedListModal() {
+  const entries = savedQueueEntries();
+  return `
+    <div class="saved-list-backdrop" role="dialog" aria-modal="true" aria-label="\uC800\uC7A5\uB41C \uB2E8\uC5B4 \uBAA9\uB85D">
+      <div class="saved-list-modal">
+        <div class="saved-list-head">
+          <div>
+            <div class="saved-list-title">\uC800\uC7A5\uB41C \uB2E8\uC5B4</div>
+            <div class="saved-list-subtitle">${entries.length.toLocaleString()}\uAC1C</div>
+          </div>
+          <button class="home-utility-button" type="button" data-action="saved-list-close">\uB2EB\uAE30</button>
+        </div>
+        <div class="saved-list-body">
+          ${entries.length ? entries.map((entry) => {
+            const track = findTrack(entry.trackId);
+            const item = findItem(entry.trackId, entry.itemId);
+            if (!track || !item) return "";
+            const key = `${escapeHtml(entry.trackId)}::${escapeHtml(entry.itemId)}`;
+            return `
+              <div class="saved-list-row">
+                <div class="saved-list-word">
+                  <strong>${escapeHtml(item.primary)}</strong>
+                  <span>${escapeHtml(item.meaning || "")}</span>
+                  <em>${escapeHtml(displayTrackTitle(track))}</em>
+                </div>
+                <div class="saved-list-actions">
+                  <button class="home-utility-button" type="button" data-unsave-item="${key}">\uD574\uC81C</button>
+                </div>
+              </div>
+            `;
+          }).join("") : `<div class="empty">\uC800\uC7A5\uB41C \uB2E8\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
 function renderCustomSelect() {
   const groups = customSelectGroups();
   const selected = new Set(state.customStageKeys);
@@ -1529,10 +1566,12 @@ function bindEvents() {
     if (action === "saved-list-open") {
       state.savedListOpen = true;
       render();
+      return;
     }
     if (action === "saved-list-close") {
       state.savedListOpen = false;
       render();
+      return;
     }
     if (action === "custom-clear") {
       state.customStageKeys = [];
@@ -1545,7 +1584,10 @@ function bindEvents() {
     if (action === "custom-progress") startProgressStudy();
     if (action === "custom-saved") startSavedStudy();
     if (action === "custom-selected") startSelectedStudy();
-    if (action === "clear-saved") clearSavedItems();
+    if (action === "clear-saved") {
+      if (window.confirm("\uC800\uC7A5\uB41C \uB2E8\uC5B4\uB97C \uBAA8\uB450 \uD574\uC81C\uD560\uAE4C\uC694?")) clearSavedItems();
+      return;
+    }
     if (target.dataset.customCollapse) {
       const [kind, key] = target.dataset.customCollapse.split(":");
       toggleCustomCollapse(kind, key);
