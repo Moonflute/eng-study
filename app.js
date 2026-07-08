@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.36";
+const APP_VERSION = "0.0.37";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -20,6 +20,9 @@ const state = {
   customStageKeys: [],
   customBatchSize: 20,
   customExcludeChecked: false,
+  customStudySession: null,
+  transientNotice: "",
+  completionPromptOpen: false,
   customCollapsedGroups: {},
   customCollapsedTracks: {},
   revealed: false,
@@ -215,6 +218,9 @@ function routeSnapshot() {
     customStageKeys: state.customStageKeys,
     customBatchSize: state.customBatchSize,
     customExcludeChecked: state.customExcludeChecked,
+    customStudySession: state.customStudySession,
+    transientNotice: state.transientNotice,
+    completionPromptOpen: state.completionPromptOpen,
     customCollapsedGroups: state.customCollapsedGroups,
     customCollapsedTracks: state.customCollapsedTracks,
     query: state.query,
@@ -252,6 +258,9 @@ function applyRouteSnapshot(snapshot) {
   state.customStageKeys = Array.isArray(next.customStageKeys) ? next.customStageKeys : [];
   state.customBatchSize = Number(next.customBatchSize || state.customBatchSize || 20);
   state.customExcludeChecked = Boolean(next.customExcludeChecked);
+  state.customStudySession = next.customStudySession && typeof next.customStudySession === "object" ? next.customStudySession : null;
+  state.transientNotice = next.transientNotice || "";
+  state.completionPromptOpen = Boolean(next.completionPromptOpen);
   state.customCollapsedGroups = next.customCollapsedGroups && typeof next.customCollapsedGroups === "object" ? next.customCollapsedGroups : {};
   state.customCollapsedTracks = next.customCollapsedTracks && typeof next.customCollapsedTracks === "object" ? next.customCollapsedTracks : {};
   state.query = next.query || "";
@@ -285,6 +294,7 @@ function setRoute(route, options = {}) {
   }
   state.savedListOpen = false;
   state.stagePreviewIndex = null;
+  state.completionPromptOpen = false;
   if (!options.skipHistory) syncHistory(Boolean(options.replace));
   render();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -294,6 +304,9 @@ function selectTrack(trackId) {
   state.studyQueue = null;
   state.queueIndex = 0;
   state.studyTitle = "";
+  state.customStudySession = null;
+  state.transientNotice = "";
+  state.completionPromptOpen = false;
   state.trackId = trackId;
   const progress = ensureTrackProgress(trackId);
   state.stageIndex = progress.lastStage || 0;
@@ -357,15 +370,119 @@ function toggleCardReveal(key) {
   state.revealed = Object.values(state.cardReveal).some(Boolean);
   render();
 }
-function moveCard(delta) {
+function queueEntryKey(entry) {
+  return `${entry.trackId}::${entry.itemId}`;
+}
+
+function shuffleEntries(entries) {
+  const result = [...entries];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const nextIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[nextIndex]] = [result[nextIndex], result[index]];
+  }
+  return result;
+}
+
+function avoidLeadingLastAgain(entries, lastAgainEntryKey) {
+  if (!lastAgainEntryKey || entries.length <= 1 || queueEntryKey(entries[0]) !== lastAgainEntryKey) return entries;
+  return [...entries.slice(1), entries[0]];
+}
+
+function isQueueEntryEligible(entry, session = state.customStudySession) {
+  if (!entry || !findItem(entry.trackId, entry.itemId)) return false;
+  if (session?.excludeChecked && isCheckedQueueEntry(entry)) return false;
+  return true;
+}
+
+function takeNextCustomBatch(session) {
+  const size = Math.max(1, Number(session?.batchSize || state.customBatchSize || 20));
+  const batch = [];
+  const used = new Set();
+  const review = Array.isArray(session.review) ? session.review.filter((entry) => isQueueEntryEligible(entry, session)) : [];
+  const pending = Array.isArray(session.pending) ? session.pending.filter((entry) => isQueueEntryEligible(entry, session)) : [];
+
+  while (batch.length < size && review.length) {
+    const entry = review.shift();
+    const key = queueEntryKey(entry);
+    if (!used.has(key)) {
+      batch.push(entry);
+      used.add(key);
+    }
+  }
+  while (batch.length < size && pending.length) {
+    const entry = pending.shift();
+    const key = queueEntryKey(entry);
+    if (!used.has(key)) {
+      batch.push(entry);
+      used.add(key);
+    }
+  }
+
+  session.review = review;
+  session.pending = pending;
+  return batch;
+}
+
+function advanceCustomStudyBatch() {
+  const session = state.customStudySession;
+  if (!session || session.mode !== "selected") return false;
+  const againEntries = (state.studyQueue || []).filter((entry) => ensureTrackProgress(entry.trackId).again.includes(entry.itemId));
+  const existingReview = Array.isArray(session.review) ? session.review : [];
+  const reviewByKey = new Map([...existingReview, ...againEntries].map((entry) => [queueEntryKey(entry), entry]));
+  session.review = shuffleEntries([...reviewByKey.values()]);
+  const nextBatch = avoidLeadingLastAgain(takeNextCustomBatch(session), session.lastAgainEntryKey);
+  if (!nextBatch.length) return false;
+  state.studyQueue = nextBatch;
+  state.transientNotice = "\uC0C8\uB85C \uCC44\uC6C1\uB2C8\uB2E4";
+  state.queueIndex = 0;
+  resetCardReveal();
+  render();
+  return true;
+}
+function openCompletionPrompt() {
+  state.completionPromptOpen = true;
+  state.transientNotice = "";
+  resetCardReveal();
+  render();
+}
+
+function closeCompletionPrompt() {
+  state.completionPromptOpen = false;
+  render();
+}
+
+function confirmCompletionPrompt() {
+  const destination = Array.isArray(state.studyQueue) ? "custom" : "track";
+  state.completionPromptOpen = false;
+  state.studyQueue = null;
+  state.queueIndex = 0;
+  state.customStudySession = null;
+  state.transientNotice = "";
+  setRoute(destination);
+}
+function moveCard(delta, decisionKind = "") {
   if (Array.isArray(state.studyQueue)) {
-    state.queueIndex = Math.min(Math.max(0, state.queueIndex + delta), Math.max(0, state.studyQueue.length - 1));
+    const nextIndex = state.queueIndex + delta;
+    if (delta > 0 && nextIndex >= state.studyQueue.length) {
+      if (advanceCustomStudyBatch()) return;
+      if (decisionKind === "known") {
+        openCompletionPrompt();
+        return;
+      }
+    }
+    state.transientNotice = "";
+    state.queueIndex = Math.min(Math.max(0, nextIndex), Math.max(0, state.studyQueue.length - 1));
     resetCardReveal();
     render();
     return;
   }
   const items = currentItems();
-  state.cardIndex = Math.min(Math.max(0, state.cardIndex + delta), Math.max(0, items.length - 1));
+  const nextIndex = state.cardIndex + delta;
+  if (delta > 0 && nextIndex >= items.length && decisionKind === "known") {
+    openCompletionPrompt();
+    return;
+  }
+  state.cardIndex = Math.min(Math.max(0, nextIndex), Math.max(0, items.length - 1));
   resetCardReveal();
   render();
 }
@@ -382,6 +499,7 @@ function markItem(kind) {
   if (kind === "again") {
     uniquePush(progress.again, item.id);
     removeValue(progress.known, item.id);
+    if (state.customStudySession?.mode === "selected") state.customStudySession.lastAgainEntryKey = queueEntryKey({ trackId: track.id, itemId: item.id });
   }
   if (kind === "saved") {
     progress.saved.includes(item.id) ? removeValue(progress.saved, item.id) : uniquePush(progress.saved, item.id);
@@ -390,7 +508,7 @@ function markItem(kind) {
     progress.checked.includes(item.id) ? removeValue(progress.checked, item.id) : uniquePush(progress.checked, item.id);
   }
   saveProgress();
-  if (kind === "known" || kind === "again") moveCard(1);
+  if (kind === "known" || kind === "again") moveCard(1, kind);
   else render();
 }
 
@@ -548,8 +666,10 @@ function queueFromStageOptions(options) {
   return options.flatMap((option) => option.items.map((item) => ({ trackId: option.track.id, itemId: item.id })));
 }
 
-function startQueue(entries, title) {
+function startQueue(entries, title, customStudySession = null) {
   if (!entries.length) return;
+  state.customStudySession = customStudySession;
+  state.transientNotice = "";
   state.studyQueue = entries;
   state.queueIndex = 0;
   state.cardIndex = 0;
@@ -585,10 +705,16 @@ function isCheckedQueueEntry(entry) {
 function startSelectedStudy() {
   const selected = new Set(state.customStageKeys);
   const options = allStageOptions().filter((option) => selected.has(option.key));
-  const entries = queueFromStageOptions(options)
-    .filter((entry) => !state.customExcludeChecked || !isCheckedQueueEntry(entry))
-    .slice(0, Math.max(1, state.customBatchSize || 20));
-  startQueue(entries, "\uC120\uD0DD");
+  const session = {
+    mode: "selected",
+    batchSize: Math.max(1, state.customBatchSize || 20),
+    excludeChecked: state.customExcludeChecked,
+    pending: shuffleEntries(queueFromStageOptions(options).filter((entry) => !state.customExcludeChecked || !isCheckedQueueEntry(entry))),
+    review: [],
+  };
+  const entries = takeNextCustomBatch(session);
+  state.customStudySession = session;
+  startQueue(entries, "\uC120\uD0DD", session);
 }
 
 function clearSavedItems() {
@@ -1048,6 +1174,21 @@ function studyRangeText(track, stage, isQueue) {
   if (isQueue) return `\uB9DE\uCDA4 \uBB49\uCE58 \u00B7 ${state.studyTitle || "Custom"}`;
   return `${escapeHtml(stageRangeLabel(stage))} \u00B7 ${escapeHtml(stageLabel(stage, state.stageIndex, track))}`;
 }
+function renderCompletionPrompt() {
+  if (!state.completionPromptOpen) return "";
+  return `
+    <div class="modal-backdrop completion-backdrop" role="dialog" aria-modal="true" aria-label="\uD559\uC2B5 \uC644\uB8CC">
+      <div class="modal-panel section-card completion-modal">
+        <div class="completion-title">\uC644\uB8CC\uD588\uC2B5\uB2C8\uB2E4</div>
+        <div class="completion-text">\uBAA9\uB85D\uC73C\uB85C \uAC00\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?</div>
+        <div class="completion-actions">
+          <button class="home-utility-button" type="button" data-action="completion-no">\uC544\uB2C8\uC624</button>
+          <button class="home-utility-button" type="button" data-action="completion-yes">\uC608</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
 function renderStudy() {
   const track = currentTrack();
   if (!track) {
@@ -1096,6 +1237,7 @@ function renderStudy() {
       <section class="section-card card-frame">
         ${item ? renderStudyCard(item, itemNumber, items.length, saved, checked, track) : `<div class="empty">\uD559\uC2B5\uD560 \uCE74\uB4DC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
       </section>
+      ${renderCompletionPrompt()}
     </div>
   `, { home: true });
 }
@@ -1118,6 +1260,7 @@ function renderStudyCard(item, current, total, saved, checked, track) {
 
   return `
     <div class="card-panel">
+      ${state.transientNotice ? `<div class="transient-notice" aria-live="polite">${escapeHtml(state.transientNotice)}</div>` : ""}
       <button class="card-speak-button" type="button" data-action="speak" aria-label="\uB2E8\uC5B4 \uBC1C\uC74C \uB4E3\uAE30">&#128266;</button>
       <button class="card-check-button${checked ? " is-active" : ""}" type="button" data-action="check" aria-label="${checked ? "\uCCB4\uD06C \uD574\uC81C" : "\uCCB4\uD06C \uC800\uC7A5"}">&#9989;</button>
       <button class="card-bookmark-button${saved ? " is-active" : ""}" type="button" data-action="save" aria-label="${saved ? "\uC800\uC7A5 \uD574\uC81C" : "\uC800\uC7A5"}">&#128278;</button>
@@ -1573,6 +1716,14 @@ function bindEvents() {
     if (action === "stage-preview-close") {
       state.stagePreviewIndex = null;
       render();
+    }
+    if (action === "completion-no") {
+      closeCompletionPrompt();
+      return;
+    }
+    if (action === "completion-yes") {
+      confirmCompletionPrompt();
+      return;
     }
     if (action === "saved-list-open") {
       state.savedListOpen = true;

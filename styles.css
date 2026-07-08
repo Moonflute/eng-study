@@ -3202,3 +3202,50 @@ button {
   padding: 18px 14px;
   border-radius: 30px;
 }
+.transient-notice {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 4;
+  transform: translateX(-50%);
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(23, 68, 71, 0.92);
+  color: #fffaf2;
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 8px 20px rgba(29, 37, 37, 0.16);
+  white-space: nowrap;
+}
+.completion-modal {
+  width: min(360px, calc(100vw - 42px));
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+}
+
+.completion-title {
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 950;
+  line-height: 1.1;
+}
+
+.completion-text {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.completion-actions {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.completion-actions .home-utility-button {
+  background: #fffdf8;
+}
