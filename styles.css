@@ -2284,7 +2284,15 @@ button {
 }
 .study-screen {
   display: grid;
-  gap: 14px;
+  gap: 4px;
+}
+
+.study-screen .home-nav-row {
+  margin-bottom: 8px;
+}
+
+.study-screen .study-info-card + .card-frame {
+  margin-top: 0;
 }
 
 .study-info-card {

@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.38";
+const APP_VERSION = "0.0.39";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -22,6 +22,7 @@ const state = {
   customBatchSize: 20,
   customExcludeChecked: false,
   customStudySession: null,
+  deckStudySession: null,
   transientNotice: "",
   completionPromptOpen: false,
   customCollapsedGroups: {},
@@ -90,9 +91,16 @@ function saveScript() {
 function ensureTrackProgress(trackId) {
   if (!state.progress.tracks) state.progress.tracks = {};
   if (!state.progress.tracks[trackId]) {
-    state.progress.tracks[trackId] = { known: [], again: [], saved: [], checked: [], lastStage: 0 };
+    state.progress.tracks[trackId] = { known: [], again: [], saved: [], checked: [], deckCompletedStages: [], lastStage: 0 };
   }
-  return state.progress.tracks[trackId];
+  const progress = state.progress.tracks[trackId];
+  progress.known ??= [];
+  progress.again ??= [];
+  progress.saved ??= [];
+  progress.checked ??= [];
+  progress.deckCompletedStages ??= [];
+  progress.lastStage ??= 0;
+  return progress;
 }
 
 function uniquePush(list, value) {
@@ -173,11 +181,7 @@ function currentItem() {
 function getTrackCompletion(track) {
   const progress = ensureTrackProgress(track.id);
   const checked = new Set(progress.checked);
-  const known = new Set(progress.known);
-  let done = 0;
-  for (const item of track.items) {
-    if (checked.has(item.id) || known.has(item.id)) done += 1;
-  }
+  const done = track.items.filter((item) => checked.has(item.id)).length;
   return Math.round((done / Math.max(1, track.items.length)) * 100);
 }
 
@@ -185,14 +189,12 @@ function appStats() {
   const allItems = state.tracks.flatMap((track) => track.items.map((item) => [track, item]));
   let saved = 0;
   let checked = 0;
-  let known = 0;
   for (const track of state.tracks) {
     const progress = ensureTrackProgress(track.id);
     saved += progress.saved.length;
     checked += progress.checked.length;
-    known += progress.known.length;
   }
-  return { tracks: state.tracks.length, cards: allItems.length, saved, checked, known };
+  return { tracks: state.tracks.length, cards: allItems.length, saved, checked };
 }
 
 function speak(text, rate = 0.86, onend = null) {
@@ -220,6 +222,7 @@ function routeSnapshot() {
     customBatchSize: state.customBatchSize,
     customExcludeChecked: state.customExcludeChecked,
     customStudySession: state.customStudySession,
+    deckStudySession: state.deckStudySession,
     transientNotice: state.transientNotice,
     completionPromptOpen: state.completionPromptOpen,
     customCollapsedGroups: state.customCollapsedGroups,
@@ -260,6 +263,7 @@ function applyRouteSnapshot(snapshot) {
   state.customBatchSize = Number(next.customBatchSize || state.customBatchSize || 20);
   state.customExcludeChecked = Boolean(next.customExcludeChecked);
   state.customStudySession = next.customStudySession && typeof next.customStudySession === "object" ? next.customStudySession : null;
+  state.deckStudySession = next.deckStudySession && typeof next.deckStudySession === "object" ? next.deckStudySession : null;
   state.transientNotice = next.transientNotice || "";
   state.completionPromptOpen = Boolean(next.completionPromptOpen);
   state.customCollapsedGroups = next.customCollapsedGroups && typeof next.customCollapsedGroups === "object" ? next.customCollapsedGroups : {};
@@ -279,13 +283,56 @@ function applyRouteSnapshot(snapshot) {
   window.scrollTo({ top: 0, behavior: "auto" });
 }
 
+function parentRouteForCurrentState() {
+  if (state.completionPromptOpen || state.progressOpen || state.savedListOpen || state.stagePreviewIndex !== null) return state.route;
+  if (state.route === "study") return Array.isArray(state.studyQueue) ? "custom" : "track";
+  if (state.route === "track") return "library";
+  if (state.route === "library" || state.route === "search" || state.route === "custom") return "word";
+  if (state.route === "custom-select") return "custom";
+  if (state.route === "script") return state.scriptMode === "listening" ? "listening" : "reading";
+  if (state.route === "word" || state.route === "reading" || state.route === "listening") return "home";
+  return "";
+}
+
+function goParentRoute(options = {}) {
+  const parentRoute = parentRouteForCurrentState();
+  if (!parentRoute) return false;
+  if (state.completionPromptOpen || state.progressOpen || state.savedListOpen || state.stagePreviewIndex !== null) {
+    state.completionPromptOpen = false;
+    state.progressOpen = false;
+    state.savedListOpen = false;
+    state.stagePreviewIndex = null;
+    if (!options.skipHistory) syncHistory(Boolean(options.replace));
+    render();
+    return true;
+  }
+  if (state.route === "study") {
+    state.studyQueue = null;
+    state.queueIndex = 0;
+    state.customStudySession = null;
+    state.deckStudySession = null;
+    clearTransientNotice();
+  }
+  setRoute(parentRoute, options);
+  return true;
+}
+
 function initHistory() {
   if (!("history" in window)) return;
   syncHistory(true);
-  window.addEventListener("popstate", (event) => applyRouteSnapshot(event.state));
+  window.addEventListener("popstate", (event) => {
+    if (!goParentRoute({ replace: true })) applyRouteSnapshot(event.state);
+  });
 }
 
 function setRoute(route, options = {}) {
+  if (state.route === "study" && route !== "study") {
+    state.studyQueue = null;
+    state.queueIndex = 0;
+    state.customStudySession = null;
+    state.deckStudySession = null;
+    clearTransientNotice();
+  }
   state.route = route;
   resetCardReveal();
   state.scriptRevealed = false;
@@ -306,6 +353,7 @@ function selectTrack(trackId) {
   state.queueIndex = 0;
   state.studyTitle = "";
   state.customStudySession = null;
+  state.deckStudySession = null;
   state.transientNotice = "";
   state.completionPromptOpen = false;
   state.trackId = trackId;
@@ -329,6 +377,8 @@ function selectStage(index) {
 
 function startStage(index) {
   selectStage(index);
+  const track = currentTrack();
+  state.deckStudySession = track ? { trackId: track.id, stageIndex: index, statusMap: {} } : null;
   setRoute("study");
 }
 
@@ -349,17 +399,22 @@ function stageRangeLabel(stage) {
 
 function stageReviewCount(track, stage) {
   const progress = ensureTrackProgress(track.id);
-  const known = new Set(progress.known || []);
-  const again = new Set(progress.again || []);
-  return track.items.slice(stage.start, stage.end).filter((item) => known.has(item.id) || again.has(item.id)).length;
+  const checked = new Set(progress.checked || []);
+  return track.items.slice(stage.start, stage.end).filter((item) => checked.has(item.id)).length;
 }
 
-function isStageComplete(track, stage) {
+function isStageComplete(track, stageIndex) {
   const progress = ensureTrackProgress(track.id);
-  const known = new Set(progress.known || []);
-  const checked = new Set(progress.checked || []);
-  const items = track.items.slice(stage.start, stage.end);
-  return Boolean(items.length) && items.every((item) => known.has(item.id) || checked.has(item.id));
+  return (progress.deckCompletedStages || []).map(Number).includes(Number(stageIndex));
+}
+
+function markCurrentDeckComplete() {
+  if (Array.isArray(state.studyQueue)) return;
+  const track = currentTrack();
+  if (!track) return;
+  const progress = ensureTrackProgress(track.id);
+  uniquePush(progress.deckCompletedStages, Number(state.stageIndex || 0));
+  saveProgress();
 }
 function resetCardReveal() {
   state.cardReveal = { meaning: false, synonym: false, example: false, exampleKo: false, note: false };
@@ -446,7 +501,8 @@ function takeNextCustomBatch(session) {
 function advanceCustomStudyBatch() {
   const session = state.customStudySession;
   if (!session || session.mode !== "selected") return false;
-  const againEntries = (state.studyQueue || []).filter((entry) => ensureTrackProgress(entry.trackId).again.includes(entry.itemId));
+  const statusMap = session.statusMap && typeof session.statusMap === "object" ? session.statusMap : {};
+  const againEntries = (state.studyQueue || []).filter((entry) => statusMap[queueEntryKey(entry)] === "again");
   const existingReview = Array.isArray(session.review) ? session.review : [];
   const reviewByKey = new Map([...existingReview, ...againEntries].map((entry) => [queueEntryKey(entry), entry]));
   session.review = shuffleEntries([...reviewByKey.values()]);
@@ -454,6 +510,7 @@ function advanceCustomStudyBatch() {
   if (!nextBatch.length) return false;
   state.studyQueue = nextBatch;
   state.queueIndex = 0;
+  session.statusMap = {};
   resetCardReveal();
   showTransientNotice("\uC120\uD0DD \uD559\uC2B5 \uBAA9\uB85D\uC744 \uC0C8\uB85C \uCC44\uC6C1\uB2C8\uB2E4");
   return true;
@@ -476,6 +533,7 @@ function confirmCompletionPrompt() {
   state.studyQueue = null;
   state.queueIndex = 0;
   state.customStudySession = null;
+  state.deckStudySession = null;
   clearTransientNotice();
   setRoute(destination);
 }
@@ -498,6 +556,7 @@ function moveCard(delta, decisionKind = "") {
   const items = currentItems();
   const nextIndex = state.cardIndex + delta;
   if (delta > 0 && nextIndex >= items.length && decisionKind === "known") {
+    markCurrentDeckComplete();
     openCompletionPrompt();
     return;
   }
@@ -511,18 +570,21 @@ function markItem(kind) {
   const item = currentItem();
   if (!track || !item) return;
   const progress = ensureTrackProgress(track.id);
-  if (kind === "known") {
-    uniquePush(progress.known, item.id);
-    removeValue(progress.again, item.id);
+  if (kind === "again" && state.customStudySession?.mode === "selected") {
+    state.customStudySession.lastAgainEntryKey = queueEntryKey({ trackId: track.id, itemId: item.id });
   }
-  if (kind === "again") {
-    uniquePush(progress.again, item.id);
-    removeValue(progress.known, item.id);
-    if (state.customStudySession?.mode === "selected") state.customStudySession.lastAgainEntryKey = queueEntryKey({ trackId: track.id, itemId: item.id });
-  }
-  if ((kind === "known" || kind === "again") && state.customStudySession?.mode === "selected") {
-    state.customStudySession.completedEntryMap ??= {};
-    state.customStudySession.completedEntryMap[queueEntryKey({ trackId: track.id, itemId: item.id })] = true;
+  if (kind === "known" || kind === "again") {
+    if (state.customStudySession?.mode === "selected") {
+      const entryKey = queueEntryKey({ trackId: track.id, itemId: item.id });
+      state.customStudySession.statusMap ??= {};
+      state.customStudySession.statusMap[entryKey] = kind;
+      state.customStudySession.completedEntryMap ??= {};
+      state.customStudySession.completedEntryMap[entryKey] = true;
+    } else {
+      state.deckStudySession ??= { trackId: track.id, stageIndex: state.stageIndex, statusMap: {} };
+      state.deckStudySession.statusMap ??= {};
+      state.deckStudySession.statusMap[item.id] = kind;
+    }
   }
   if (kind === "saved") {
     progress.saved.includes(item.id) ? removeValue(progress.saved, item.id) : uniquePush(progress.saved, item.id);
@@ -659,9 +721,8 @@ function allStageOptions() {
     track.stages.map((stage, index) => {
       const items = track.items.slice(stage.start, stage.end);
       const progress = ensureTrackProgress(track.id);
-      const known = new Set(progress.known);
       const checked = new Set(progress.checked);
-      const done = items.filter((item) => known.has(item.id) || checked.has(item.id)).length;
+      const done = items.filter((item) => checked.has(item.id)).length;
       return {
         key: stageKey(track.id, index),
         track,
@@ -671,6 +732,7 @@ function allStageOptions() {
         done,
         total: items.length,
         percent: Math.round((done / Math.max(1, items.length)) * 100),
+        deckComplete: isStageComplete(track, index),
       };
     }),
   );
@@ -735,6 +797,7 @@ function startSelectedStudy() {
     excludeChecked: state.customExcludeChecked,
     totalEntries: sourceEntries.length,
     completedEntryMap: {},
+    statusMap: {},
     pending: shuffleEntries(sourceEntries),
     review: [],
   };
@@ -957,12 +1020,12 @@ function progressGroups() {
 }
 
 function completedStageCount(track) {
-  return (track.stages || []).filter((stage) => isStageComplete(track, stage)).length;
+  return (track.stages || []).filter((stage, index) => isStageComplete(track, index)).length;
 }
 
 function renderProgressCells(track) {
-  return (track.stages || []).map((stage) => {
-    const complete = isStageComplete(track, stage);
+  return (track.stages || []).map((stage, index) => {
+    const complete = isStageComplete(track, index);
     const review = stageReviewCount(track, stage) > 0;
     return `<span class="progress-cell${complete ? " is-complete" : review ? " is-active" : ""}"></span>`;
   }).join("");
@@ -975,7 +1038,7 @@ function renderProgressModal() {
         <div class="progress-modal__head">
           <div>
             <div class="progress-modal__title">\uC9C4\uD589\uB960</div>
-            <div class="progress-modal__subtitle">\uAC01 \uD30C\uD2B8\uBCC4 \uC54C\uACE0\uC788\uC74C \uAE30\uC900 \uC9C4\uD589\uB960</div>
+            <div class="progress-modal__subtitle">\uB371 \uD559\uC2B5 \uC644\uB8CC\uC640 \uCCB4\uD06C \uAE30\uC900 \uC9C4\uD589\uB960</div>
           </div>
           <button class="stage-preview-close" type="button" data-action="progress-close" aria-label="\uC9C4\uD589\uB960 \uB2EB\uAE30">\u00D7</button>
         </div>
@@ -989,7 +1052,7 @@ function renderProgressModal() {
                   <div class="progress-track">
                     <div class="progress-track__head">
                       <strong>${escapeHtml(track.title)}</strong>
-                      <span>${completedStageCount(track)}/${track.stages.length} \uBB49\uCE58 \uC644\uB8CC \u00B7 ${(progress.known || []).length}/${track.total}</span>
+                      <span>${completedStageCount(track)}/${track.stages.length} \uBB49\uCE58 \uC644\uB8CC \u00B7 \uCCB4\uD06C ${(progress.checked || []).length}/${track.total}</span>
                     </div>
                     <div class="progress-cells">${renderProgressCells(track)}</div>
                   </div>
@@ -1077,12 +1140,9 @@ function renderLibrarySection(group = state.group, limit = Infinity) {
 }
 
 function renderTrackCard(track) {
-  const progress = ensureTrackProgress(track.id);
   const active = track.id === state.trackId;
   const kind = vocabKind(track);
-  const meta = ["toeic", "toefl"].includes(kind)
-    ? `${track.total.toLocaleString()}\uAC1C`
-    : `${track.total.toLocaleString()}\uAC1C \u00B7 \uC54C\uACE0\uC788\uC74C ${(progress.known || []).length.toLocaleString()} \u00B7 \uACF5\uBD80\uD558\uACA0\uC74C ${(progress.again || []).length.toLocaleString()}`;
+  const meta = `${track.total.toLocaleString()}\uAC1C`;
   return `
     <button class="type-button word-type-card${active ? " is-active" : ""}" type="button" data-track-id="${escapeHtml(track.id)}">
       <div class="type-button__title">${escapeHtml(displayTrackTitle(track))}</div>
@@ -1130,7 +1190,7 @@ function renderTrackDetail() {
       <section class="section-card word-stage-panel">
         <div class="stage-list word-stage-list">
           ${stages.map((stage, index) => {
-            const complete = isStageComplete(track, stage);
+            const complete = isStageComplete(track, index);
             return `
               <div class="stage-row stage-row--day">
                 <div class="stage-button stage-button--day" data-stage-row-index="${index}">
@@ -1196,6 +1256,33 @@ function studyStatsForEntries(entries, fallbackTrack = null) {
   return { known, again };
 }
 
+function selectedSessionStats(entries) {
+  const statusMap = state.customStudySession?.statusMap && typeof state.customStudySession.statusMap === "object"
+    ? state.customStudySession.statusMap
+    : {};
+  let known = 0;
+  let again = 0;
+  for (const entry of entries) {
+    const status = statusMap[queueEntryKey(entry)];
+    if (status === "known") known += 1;
+    if (status === "again") again += 1;
+  }
+  return { known, again };
+}
+
+function deckSessionStats(items) {
+  const session = state.deckStudySession;
+  const statusMap = session?.statusMap && typeof session.statusMap === "object" ? session.statusMap : {};
+  let known = 0;
+  let again = 0;
+  for (const item of items) {
+    const status = statusMap[item.id];
+    if (status === "known") known += 1;
+    if (status === "again") again += 1;
+  }
+  return { known, again };
+}
+
 function studyRangeText(track, stage, isQueue) {
   if (isQueue) return `\uB9DE\uCDA4 \uBB49\uCE58 \u00B7 ${state.studyTitle || "Custom"}`;
   return `${escapeHtml(stageRangeLabel(stage))} \u00B7 ${escapeHtml(stageLabel(stage, state.stageIndex, track))}`;
@@ -1205,7 +1292,7 @@ function renderCompletionPrompt() {
   return `
     <div class="modal-backdrop completion-backdrop" role="dialog" aria-modal="true" aria-label="\uD559\uC2B5 \uC644\uB8CC">
       <div class="modal-panel section-card completion-modal">
-        <div class="completion-title">\uC624\uB298 \uBD84\uB7C9 \uB05D</div>
+        <div class="completion-title">\uB2E8\uC5B4 \uBB49\uCE58 \uD559\uC2B5 \uC644\uB8CC</div>
         <div class="completion-text">\uC774\uC81C \uBAA9\uB85D\uC73C\uB85C \uB3CC\uC544\uAC08\uAE4C\uC694?</div>
         <div class="completion-actions">
           <button class="home-utility-button completion-button completion-button--yes" type="button" data-action="completion-yes">\uC608</button>
@@ -1244,7 +1331,9 @@ function renderStudy() {
   const checked = item ? progress.checked.includes(item.id) : false;
   const title = isQueue ? `${state.studyTitle || "Custom"} \u00B7 ${escapeHtml(track.title)}` : escapeHtml(track.title);
   const entriesForStats = isQueue ? state.studyQueue : items;
-  const stats = studyStatsForEntries(entriesForStats, track);
+  const stats = isQueue && state.customStudySession?.mode === "selected"
+    ? selectedSessionStats(entriesForStats)
+    : deckSessionStats(items);
   const progressText = studyProgressText(itemNumber, items.length);
   const rangeText = studyRangeText(track, stage, isQueue);
 
@@ -1560,7 +1649,7 @@ function renderCustomSelect() {
                     </button>
                     ${trackCollapsed ? "" : `<div class="custom-stage-chip-grid">
                       ${track.options.map((option, index) => `
-                        <button class="custom-stage-chip${selected.has(option.key) ? " is-active" : ""}${option.percent >= 100 ? " is-complete" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
+                        <button class="custom-stage-chip${selected.has(option.key) ? " is-active" : ""}${option.deckComplete ? " is-complete" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
                           ${String(index + 1).padStart(2, "0")}
                         </button>
                       `).join("")}
