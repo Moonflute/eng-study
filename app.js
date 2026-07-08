@@ -1,10 +1,11 @@
-const APP_VERSION = "0.0.37";
+const APP_VERSION = "0.0.38";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
 const SOURCE_URL = "./data/english-source.json";
 
 const app = document.querySelector("#app");
+let transientNoticeTimer = null;
 
 const state = {
   route: "home",
@@ -365,6 +366,25 @@ function resetCardReveal() {
   state.revealed = false;
 }
 
+function clearTransientNotice() {
+  if (transientNoticeTimer) {
+    window.clearTimeout(transientNoticeTimer);
+    transientNoticeTimer = null;
+  }
+  state.transientNotice = "";
+}
+
+function showTransientNotice(text, duration = 1500) {
+  clearTransientNotice();
+  state.transientNotice = text;
+  render();
+  transientNoticeTimer = window.setTimeout(() => {
+    state.transientNotice = "";
+    transientNoticeTimer = null;
+    if (state.route === "study") render();
+  }, duration);
+}
+
 function toggleCardReveal(key) {
   state.cardReveal = { ...state.cardReveal, [key]: !state.cardReveal?.[key] };
   state.revealed = Object.values(state.cardReveal).some(Boolean);
@@ -433,15 +453,14 @@ function advanceCustomStudyBatch() {
   const nextBatch = avoidLeadingLastAgain(takeNextCustomBatch(session), session.lastAgainEntryKey);
   if (!nextBatch.length) return false;
   state.studyQueue = nextBatch;
-  state.transientNotice = "\uC0C8\uB85C \uCC44\uC6C1\uB2C8\uB2E4";
   state.queueIndex = 0;
   resetCardReveal();
-  render();
+  showTransientNotice("\uC120\uD0DD \uD559\uC2B5 \uBAA9\uB85D\uC744 \uC0C8\uB85C \uCC44\uC6C1\uB2C8\uB2E4");
   return true;
 }
 function openCompletionPrompt() {
   state.completionPromptOpen = true;
-  state.transientNotice = "";
+  clearTransientNotice();
   resetCardReveal();
   render();
 }
@@ -457,7 +476,7 @@ function confirmCompletionPrompt() {
   state.studyQueue = null;
   state.queueIndex = 0;
   state.customStudySession = null;
-  state.transientNotice = "";
+  clearTransientNotice();
   setRoute(destination);
 }
 function moveCard(delta, decisionKind = "") {
@@ -470,7 +489,7 @@ function moveCard(delta, decisionKind = "") {
         return;
       }
     }
-    state.transientNotice = "";
+    clearTransientNotice();
     state.queueIndex = Math.min(Math.max(0, nextIndex), Math.max(0, state.studyQueue.length - 1));
     resetCardReveal();
     render();
@@ -500,6 +519,10 @@ function markItem(kind) {
     uniquePush(progress.again, item.id);
     removeValue(progress.known, item.id);
     if (state.customStudySession?.mode === "selected") state.customStudySession.lastAgainEntryKey = queueEntryKey({ trackId: track.id, itemId: item.id });
+  }
+  if ((kind === "known" || kind === "again") && state.customStudySession?.mode === "selected") {
+    state.customStudySession.completedEntryMap ??= {};
+    state.customStudySession.completedEntryMap[queueEntryKey({ trackId: track.id, itemId: item.id })] = true;
   }
   if (kind === "saved") {
     progress.saved.includes(item.id) ? removeValue(progress.saved, item.id) : uniquePush(progress.saved, item.id);
@@ -669,7 +692,7 @@ function queueFromStageOptions(options) {
 function startQueue(entries, title, customStudySession = null) {
   if (!entries.length) return;
   state.customStudySession = customStudySession;
-  state.transientNotice = "";
+  clearTransientNotice();
   state.studyQueue = entries;
   state.queueIndex = 0;
   state.cardIndex = 0;
@@ -705,11 +728,14 @@ function isCheckedQueueEntry(entry) {
 function startSelectedStudy() {
   const selected = new Set(state.customStageKeys);
   const options = allStageOptions().filter((option) => selected.has(option.key));
+  const sourceEntries = queueFromStageOptions(options).filter((entry) => !state.customExcludeChecked || !isCheckedQueueEntry(entry));
   const session = {
     mode: "selected",
     batchSize: Math.max(1, state.customBatchSize || 20),
     excludeChecked: state.customExcludeChecked,
-    pending: shuffleEntries(queueFromStageOptions(options).filter((entry) => !state.customExcludeChecked || !isCheckedQueueEntry(entry))),
+    totalEntries: sourceEntries.length,
+    completedEntryMap: {},
+    pending: shuffleEntries(sourceEntries),
     review: [],
   };
   const entries = takeNextCustomBatch(session);
@@ -1179,16 +1205,29 @@ function renderCompletionPrompt() {
   return `
     <div class="modal-backdrop completion-backdrop" role="dialog" aria-modal="true" aria-label="\uD559\uC2B5 \uC644\uB8CC">
       <div class="modal-panel section-card completion-modal">
-        <div class="completion-title">\uC644\uB8CC\uD588\uC2B5\uB2C8\uB2E4</div>
-        <div class="completion-text">\uBAA9\uB85D\uC73C\uB85C \uAC00\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?</div>
+        <div class="completion-title">\uC624\uB298 \uBD84\uB7C9 \uB05D</div>
+        <div class="completion-text">\uC774\uC81C \uBAA9\uB85D\uC73C\uB85C \uB3CC\uC544\uAC08\uAE4C\uC694?</div>
         <div class="completion-actions">
-          <button class="home-utility-button" type="button" data-action="completion-no">\uC544\uB2C8\uC624</button>
-          <button class="home-utility-button" type="button" data-action="completion-yes">\uC608</button>
+          <button class="home-utility-button completion-button completion-button--yes" type="button" data-action="completion-yes">\uC608</button>
+          <button class="home-utility-button completion-button completion-button--no" type="button" data-action="completion-no">\uC544\uB2C8\uC624</button>
         </div>
       </div>
     </div>
   `;
 }
+function studyProgressText(itemNumber, batchTotal) {
+  const session = state.customStudySession;
+  if (!Array.isArray(state.studyQueue) || session?.mode !== "selected") return `${itemNumber}/${batchTotal || 0}`;
+  const total = Math.max(0, Number(session.totalEntries || 0));
+  if (!total) return `${itemNumber}/${batchTotal || 0}`;
+  const completed = session.completedEntryMap && typeof session.completedEntryMap === "object" ? session.completedEntryMap : {};
+  const done = Object.keys(completed).length;
+  const currentEntry = state.studyQueue[state.queueIndex];
+  const currentKey = currentEntry ? queueEntryKey(currentEntry) : "";
+  const currentNumber = currentKey && completed[currentKey] ? done : done + 1;
+  return `${Math.min(total, Math.max(1, currentNumber))}/${total}`;
+}
+
 function renderStudy() {
   const track = currentTrack();
   if (!track) {
@@ -1206,7 +1245,7 @@ function renderStudy() {
   const title = isQueue ? `${state.studyTitle || "Custom"} \u00B7 ${escapeHtml(track.title)}` : escapeHtml(track.title);
   const entriesForStats = isQueue ? state.studyQueue : items;
   const stats = studyStatsForEntries(entriesForStats, track);
-  const progressText = `${itemNumber}/${items.length || 0}`;
+  const progressText = studyProgressText(itemNumber, items.length);
   const rangeText = studyRangeText(track, stage, isQueue);
 
   renderShell(`
