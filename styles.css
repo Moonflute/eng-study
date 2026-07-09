@@ -2307,6 +2307,11 @@ button {
 
 .study-info-card .study-progress {
   min-width: 54px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .study-info-card .study-summary-row {

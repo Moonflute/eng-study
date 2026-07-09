@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.39";
+const APP_VERSION = "0.0.40";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1306,13 +1306,16 @@ function studyProgressText(itemNumber, batchTotal) {
   const session = state.customStudySession;
   if (!Array.isArray(state.studyQueue) || session?.mode !== "selected") return `${itemNumber}/${batchTotal || 0}`;
   const total = Math.max(0, Number(session.totalEntries || 0));
-  if (!total) return `${itemNumber}/${batchTotal || 0}`;
+  const batchCurrent = Math.min(Math.max(1, state.queueIndex + 1), Math.max(1, state.studyQueue.length || batchTotal || 0));
+  const batchText = `${batchCurrent}/${Math.max(0, state.studyQueue.length || batchTotal || 0)}`;
+  if (!total) return batchText;
   const completed = session.completedEntryMap && typeof session.completedEntryMap === "object" ? session.completedEntryMap : {};
   const done = Object.keys(completed).length;
   const currentEntry = state.studyQueue[state.queueIndex];
   const currentKey = currentEntry ? queueEntryKey(currentEntry) : "";
   const currentNumber = currentKey && completed[currentKey] ? done : done + 1;
-  return `${Math.min(total, Math.max(1, currentNumber))}/${total}`;
+  const totalText = `${Math.min(total, Math.max(1, currentNumber))}/${total}`;
+  return `${totalText}&nbsp;&nbsp;${batchText}`;
 }
 
 function renderStudy() {
