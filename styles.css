@@ -1971,7 +1971,9 @@ button {
 }
 .saved-list-backdrop {
   align-items: flex-start;
+  justify-items: center;
   padding: 70px 18px 24px;
+  overflow: auto;
   background: rgba(20, 28, 28, 0.22);
   backdrop-filter: blur(4px);
 }
@@ -1981,7 +1983,10 @@ button {
   max-height: calc(100dvh - 104px);
   overflow: auto;
   padding: 22px;
+  border: 1px solid var(--line);
   border-radius: 28px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .saved-list-head {

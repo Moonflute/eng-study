@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.40";
+const APP_VERSION = "0.0.41";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1582,8 +1582,8 @@ function renderCustomMenu() {
 function renderSavedListModal() {
   const entries = savedQueueEntries();
   return `
-    <div class="saved-list-backdrop" role="dialog" aria-modal="true" aria-label="\uC800\uC7A5\uB41C \uB2E8\uC5B4 \uBAA9\uB85D">
-      <div class="saved-list-modal">
+    <div class="modal-backdrop saved-list-backdrop" role="dialog" aria-modal="true" aria-label="\uC800\uC7A5\uB41C \uB2E8\uC5B4 \uBAA9\uB85D">
+      <div class="modal-panel saved-list-modal">
         <div class="saved-list-head">
           <div>
             <div class="saved-list-title">\uC800\uC7A5\uB41C \uB2E8\uC5B4</div>
