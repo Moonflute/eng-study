@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.42";
+const APP_VERSION = "0.0.43";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1592,19 +1592,26 @@ function renderSavedListModal() {
           <button class="home-utility-button" type="button" data-action="saved-list-close">\uB2EB\uAE30</button>
         </div>
         <div class="saved-list-body">
-          ${entries.length ? entries.map((entry) => {
-            const track = findTrack(entry.trackId);
-            const item = findItem(entry.trackId, entry.itemId);
-            if (!track || !item) return "";
-            const key = `${escapeHtml(entry.trackId)}::${escapeHtml(entry.itemId)}`;
-            return `
-              <div class="saved-list-row" title="${escapeHtml(displayTrackTitle(track))}">
-                <span class="saved-list-term">${escapeHtml(item.primary)}</span>
-                <span class="saved-list-meaning">${escapeHtml(item.meaning || "")}</span>
-                <button class="saved-list-remove" type="button" data-unsave-item="${key}">\uD574\uC81C</button>
-              </div>
-            `;
-          }).join("") : `<div class="empty">\uC800\uC7A5\uB41C \uB2E8\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
+          ${entries.length ? `
+            <div class="stage-word-table saved-word-table">
+              <div class="stage-word-row stage-word-row--head saved-word-row"><span>\uB2E8\uC5B4</span><span>\uB73B</span><span>\uC800\uC7A5</span></div>
+              ${entries.map((entry) => {
+                const track = findTrack(entry.trackId);
+                const item = findItem(entry.trackId, entry.itemId);
+                if (!track || !item) return "";
+                const key = `${escapeHtml(entry.trackId)}::${escapeHtml(entry.itemId)}`;
+                return `
+                  <div class="stage-word-row saved-word-row" title="${escapeHtml(displayTrackTitle(track))}">
+                    <span class="stage-word-term">${escapeHtml(item.primary)}</span>
+                    <span class="stage-word-meaning">${escapeHtml(item.meaning || "")}</span>
+                    <label class="saved-word-check" aria-label="\uC800\uC7A5 \uD574\uC81C">
+                      <input type="checkbox" checked data-unsave-item="${key}">
+                    </label>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          ` : `<div class="empty">\uC800\uC7A5\uB41C \uB2E8\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}
         </div>
       </div>
     </div>

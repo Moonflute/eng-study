@@ -2015,47 +2015,24 @@ button {
   gap: 10px;
 }
 
-.saved-list-row {
-  display: grid;
-  grid-template-columns: minmax(78px, 0.75fr) minmax(0, 1fr) auto;
-  gap: 8px;
+.saved-word-row {
+  grid-template-columns: minmax(92px, 0.9fr) minmax(0, 1.4fr) 44px;
   align-items: center;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #fffdf8;
 }
 
-.saved-list-term,
-.saved-list-meaning {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.saved-word-row.stage-word-row--head span:last-child {
+  text-align: center;
 }
 
-.saved-list-term {
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 950;
+.saved-word-check {
+  display: grid;
+  place-items: center;
 }
 
-.saved-list-meaning {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 750;
-}
-
-.saved-list-remove {
-  min-width: 42px;
-  min-height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 253, 248, 0.96);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 900;
+.saved-word-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--brand);
 }
 
 @media (max-width: 420px) {
@@ -2063,19 +2040,8 @@ button {
     padding: 18px;
   }
 
-  .saved-list-row {
-    grid-template-columns: minmax(66px, 0.7fr) minmax(0, 1fr) auto;
-    gap: 6px;
-    padding: 8px;
-  }
-
-  .saved-list-term {
-    font-size: 13px;
-  }
-
-  .saved-list-remove {
-    min-width: 38px;
-    padding-inline: 6px;
+  .saved-word-row {
+    grid-template-columns: minmax(84px, 0.85fr) minmax(0, 1.35fr) 34px;
   }
 }
 .card-frame {
