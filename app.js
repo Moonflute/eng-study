@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.43";
+const APP_VERSION = "0.0.44";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -298,6 +298,7 @@ function goParentRoute(options = {}) {
   const parentRoute = parentRouteForCurrentState();
   if (!parentRoute) return false;
   if (state.completionPromptOpen || state.progressOpen || state.savedListOpen || state.stagePreviewIndex !== null) {
+    if (state.savedListOpen) applySavedListChanges();
     state.completionPromptOpen = false;
     state.progressOpen = false;
     state.savedListOpen = false;
@@ -340,6 +341,7 @@ function setRoute(route, options = {}) {
     state.readingFull = false;
     state.scriptBookmarkMode = false;
   }
+  if (state.savedListOpen) applySavedListChanges();
   state.savedListOpen = false;
   state.stagePreviewIndex = null;
   state.completionPromptOpen = false;
@@ -810,6 +812,17 @@ function clearSavedItems() {
   for (const track of state.tracks) ensureTrackProgress(track.id).saved = [];
   saveProgress();
   render();
+}
+
+function applySavedListChanges() {
+  const checkboxes = [...document.querySelectorAll("[data-saved-list-item]")];
+  if (!checkboxes.length) return;
+  for (const checkbox of checkboxes) {
+    if (checkbox.checked) continue;
+    const [trackId, itemId] = checkbox.dataset.savedListItem.split("::");
+    removeValue(ensureTrackProgress(trackId).saved, itemId);
+  }
+  saveProgress();
 }
 function renderShell(content, options = {}) {
   const header = options.home
@@ -1605,7 +1618,7 @@ function renderSavedListModal() {
                     <span class="stage-word-term">${escapeHtml(item.primary)}</span>
                     <span class="stage-word-meaning">${escapeHtml(item.meaning || "")}</span>
                     <label class="saved-word-check" aria-label="\uC800\uC7A5 \uD574\uC81C">
-                      <input type="checkbox" checked data-unsave-item="${key}">
+                      <input type="checkbox" checked data-saved-list-item="${key}">
                     </label>
                   </div>
                 `;
@@ -1828,15 +1841,6 @@ function bindEvents() {
       toggleCardReveal(target.dataset.cardReveal);
       return;
     }
-    if (target.dataset.unsaveItem) {
-      const [trackId, itemId] = target.dataset.unsaveItem.split("::");
-      const progress = ensureTrackProgress(trackId);
-      removeValue(progress.saved, itemId);
-      saveProgress();
-      render();
-      return;
-    }
-
     const action = target.dataset.action;
     if (action === "progress-open") {
       state.progressOpen = true;
@@ -1864,6 +1868,7 @@ function bindEvents() {
       return;
     }
     if (action === "saved-list-close") {
+      applySavedListChanges();
       state.savedListOpen = false;
       render();
       return;
