@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.47";
+const APP_VERSION = "0.0.48";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1552,7 +1552,6 @@ function renderStudy() {
     ? selectedSessionStats(entriesForStats)
     : deckSessionStats(items);
   const progressText = studyProgressText(itemNumber, items.length);
-  const rangeText = studyRangeText(track, stage, isQueue);
 
   renderShell(`
     <div class="legacy-screen study-screen">
@@ -1563,17 +1562,11 @@ function renderStudy() {
         <div class="study-head">
           <div class="study-head-main">
             <h1 class="page-title page-title--study">${title}</h1>
-            <div class="study-inline-meta">
-              <span class="page-subtitle">\uC601\uC5B4\uB97C \uBCF4\uACE0 \uB73B\uC744 \uB5A0\uC62C\uB9B0 \uB4A4 \uD655\uC778</span>
-            </div>
             <div class="study-progress">${progressText}</div>
           </div>
           <div class="study-head-right">${renderStudyTimer()}</div>
         </div>
         <div class="study-summary-row">
-          <div class="study-summary-left">
-            <span class="page-subtitle">${rangeText}</span>
-          </div>
           <div class="study-summary-stats">
             <span class="study-stat-chip">\uC54C\uACE0\uC788\uC74C <strong>${stats.known}</strong></span>
             <span class="study-stat-chip">\uACF5\uBD80\uD558\uACA0\uC74C <strong>${stats.again}</strong></span>

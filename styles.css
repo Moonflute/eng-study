@@ -1731,7 +1731,7 @@ button {
 }
 
 .progress-modal__subtitle {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--muted);
   font-size: 14px;
 }
@@ -2283,7 +2283,7 @@ button {
 }
 
 .study-info-card {
-  padding: 18px 20px;
+  padding: 14px 20px;
   border-radius: 24px;
 }
 
@@ -2304,7 +2304,7 @@ button {
 }
 
 .study-info-card .study-progress {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--muted);
   font-size: 14px;
   font-weight: 850;
@@ -2316,8 +2316,8 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .study-info-card .study-summary-stats {
@@ -2540,7 +2540,7 @@ button {
 }
 
 .reading-full__translation {
-  margin-top: 6px;
+  margin-top: 4px;
   color: var(--muted);
 }
 
@@ -3426,7 +3426,7 @@ button {
 .settings-select {
   width: 100%;
   min-height: 36px;
-  margin-top: 6px;
+  margin-top: 4px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #fffdf8;
