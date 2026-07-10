@@ -1,11 +1,15 @@
-const APP_VERSION = "0.0.44";
+const APP_VERSION = "0.0.45";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
+const SETTINGS_STORAGE_KEY = "english-study-lab-settings-v0";
 const SOURCE_URL = "./data/english-source.json";
+const DEFAULT_SETTINGS = { batchSize: 7, checkAsKnown: false, timerEnabled: false, timerSeconds: 10, timerTheme: "number" };
 
 const app = document.querySelector("#app");
 let transientNoticeTimer = null;
+let studyTimerInterval = null;
+const initialSettings = loadSettings();
 
 const state = {
   route: "home",
@@ -19,8 +23,9 @@ const state = {
   queueIndex: 0,
   studyTitle: "",
   customStageKeys: [],
-  customBatchSize: 20,
+  customBatchSize: initialSettings.batchSize,
   customExcludeChecked: false,
+  customShowUncheckedCounts: false,
   customStudySession: null,
   deckStudySession: null,
   transientNotice: "",
@@ -40,6 +45,9 @@ const state = {
   scriptBookmarkMode: false,
   modeProgress: loadModeProgress(),
   progress: loadProgress(),
+  settings: initialSettings,
+  settingsOpen: false,
+  cardTimerStartedAt: 0,
   error: "",
   gamepadButtons: {},
   progressOpen: false,
@@ -53,6 +61,25 @@ function defaultScriptText() {
     "Read it once for meaning, listen once for rhythm, and then speak it back in your own voice.",
     "Small daily repetitions build a vocabulary that stays available when you need it.",
   ].join("\n");
+}
+
+function loadSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}");
+    return {
+      ...DEFAULT_SETTINGS,
+      ...saved,
+      batchSize: [7, 20].includes(Number(saved.batchSize)) ? Number(saved.batchSize) : DEFAULT_SETTINGS.batchSize,
+      timerSeconds: Math.max(3, Math.min(300, Number(saved.timerSeconds || DEFAULT_SETTINGS.timerSeconds))),
+      timerTheme: ["number", "circle"].includes(saved.timerTheme) ? saved.timerTheme : DEFAULT_SETTINGS.timerTheme,
+    };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings() {
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(state.settings));
 }
 
 function loadModeProgress() {
@@ -221,6 +248,7 @@ function routeSnapshot() {
     customStageKeys: state.customStageKeys,
     customBatchSize: state.customBatchSize,
     customExcludeChecked: state.customExcludeChecked,
+    customShowUncheckedCounts: state.customShowUncheckedCounts,
     customStudySession: state.customStudySession,
     deckStudySession: state.deckStudySession,
     transientNotice: state.transientNotice,
@@ -236,6 +264,7 @@ function routeSnapshot() {
     progressOpen: state.progressOpen,
     savedListOpen: state.savedListOpen,
     stagePreviewIndex: state.stagePreviewIndex,
+    settingsOpen: state.settingsOpen,
   };
 }
 
@@ -260,8 +289,9 @@ function applyRouteSnapshot(snapshot) {
   state.queueIndex = Number(next.queueIndex || 0);
   state.studyTitle = next.studyTitle || "";
   state.customStageKeys = Array.isArray(next.customStageKeys) ? next.customStageKeys : [];
-  state.customBatchSize = Number(next.customBatchSize || state.customBatchSize || 20);
+  state.customBatchSize = Number(next.customBatchSize || state.customBatchSize || state.settings?.batchSize || 7);
   state.customExcludeChecked = Boolean(next.customExcludeChecked);
+  state.customShowUncheckedCounts = Boolean(next.customShowUncheckedCounts);
   state.customStudySession = next.customStudySession && typeof next.customStudySession === "object" ? next.customStudySession : null;
   state.deckStudySession = next.deckStudySession && typeof next.deckStudySession === "object" ? next.deckStudySession : null;
   state.transientNotice = next.transientNotice || "";
@@ -277,6 +307,7 @@ function applyRouteSnapshot(snapshot) {
   state.progressOpen = Boolean(next.progressOpen);
   state.savedListOpen = Boolean(next.savedListOpen);
   state.stagePreviewIndex = Number.isFinite(Number(next.stagePreviewIndex)) ? Number(next.stagePreviewIndex) : null;
+  state.settingsOpen = Boolean(next.settingsOpen);
   resetCardReveal();
   state.scriptRevealed = false;
   render();
@@ -284,7 +315,7 @@ function applyRouteSnapshot(snapshot) {
 }
 
 function parentRouteForCurrentState() {
-  if (state.completionPromptOpen || state.progressOpen || state.savedListOpen || state.stagePreviewIndex !== null) return state.route;
+  if (state.completionPromptOpen || state.progressOpen || state.savedListOpen || state.settingsOpen || state.stagePreviewIndex !== null) return state.route;
   if (state.route === "study") return Array.isArray(state.studyQueue) ? "custom" : "track";
   if (state.route === "track") return "library";
   if (state.route === "library" || state.route === "search" || state.route === "custom") return "word";
@@ -297,11 +328,12 @@ function parentRouteForCurrentState() {
 function goParentRoute(options = {}) {
   const parentRoute = parentRouteForCurrentState();
   if (!parentRoute) return false;
-  if (state.completionPromptOpen || state.progressOpen || state.savedListOpen || state.stagePreviewIndex !== null) {
+  if (state.completionPromptOpen || state.progressOpen || state.savedListOpen || state.settingsOpen || state.stagePreviewIndex !== null) {
     if (state.savedListOpen) applySavedListChanges();
     state.completionPromptOpen = false;
     state.progressOpen = false;
     state.savedListOpen = false;
+    state.settingsOpen = false;
     state.stagePreviewIndex = null;
     if (!options.skipHistory) syncHistory(Boolean(options.replace));
     render();
@@ -345,6 +377,7 @@ function setRoute(route, options = {}) {
   state.savedListOpen = false;
   state.stagePreviewIndex = null;
   state.completionPromptOpen = false;
+  state.settingsOpen = false;
   if (!options.skipHistory) syncHistory(Boolean(options.replace));
   render();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -381,6 +414,7 @@ function startStage(index) {
   selectStage(index);
   const track = currentTrack();
   state.deckStudySession = track ? { trackId: track.id, stageIndex: index, statusMap: {} } : null;
+  state.cardTimerStartedAt = 0;
   setRoute("study");
 }
 
@@ -447,6 +481,75 @@ function toggleCardReveal(key) {
   state.revealed = Object.values(state.cardReveal).some(Boolean);
   render();
 }
+
+function revealKeysForItem(item = currentItem(), track = currentTrack()) {
+  if (!item) return [];
+  const keys = ["meaning"];
+  if (vocabKind(track || currentTrack()) === "toefl" && synonymText(item)) keys.push("synonym");
+  if (item.exampleJa) keys.push("example");
+  if (item.exampleKo) keys.push("exampleKo");
+  return keys;
+}
+
+function toggleAllCardReveal() {
+  const keys = revealKeysForItem();
+  if (!keys.length) return;
+  const shouldShow = !keys.every((key) => Boolean(state.cardReveal?.[key]));
+  const nextReveal = { meaning: false, synonym: false, example: false, exampleKo: false, note: false };
+  for (const key of keys) nextReveal[key] = shouldShow;
+  state.cardReveal = nextReveal;
+  state.revealed = shouldShow;
+  render();
+}
+
+function stopStudyTimer() {
+  if (studyTimerInterval) {
+    window.clearInterval(studyTimerInterval);
+    studyTimerInterval = null;
+  }
+}
+
+function timerDurationMs() {
+  return Math.max(3, Number(state.settings?.timerSeconds || DEFAULT_SETTINGS.timerSeconds)) * 1000;
+}
+
+function timerRemainingSeconds() {
+  if (!state.cardTimerStartedAt) return Math.ceil(timerDurationMs() / 1000);
+  const elapsed = Date.now() - state.cardTimerStartedAt;
+  return Math.max(0, Math.ceil((timerDurationMs() - elapsed) / 1000));
+}
+
+function startStudyTimer() {
+  stopStudyTimer();
+  if (state.route !== "study" || !state.settings?.timerEnabled || state.completionPromptOpen) return;
+  state.cardTimerStartedAt = Date.now();
+  studyTimerInterval = window.setInterval(tickStudyTimer, 250);
+}
+
+function ensureStudyTimer() {
+  if (state.route !== "study" || !state.settings?.timerEnabled || state.completionPromptOpen) {
+    stopStudyTimer();
+    return;
+  }
+  if (!state.cardTimerStartedAt) state.cardTimerStartedAt = Date.now();
+  if (!studyTimerInterval) studyTimerInterval = window.setInterval(tickStudyTimer, 250);
+  tickStudyTimer(false);
+}
+
+function tickStudyTimer(allowExpire = true) {
+  const remaining = timerRemainingSeconds();
+  const value = document.querySelector("[data-study-timer-value]");
+  if (value) value.textContent = String(remaining);
+  const ring = document.querySelector(".study-timer--circle");
+  if (ring) {
+    const total = Math.max(1, Math.ceil(timerDurationMs() / 1000));
+    ring.style.setProperty("--timer-progress", `${Math.max(0, Math.min(1, remaining / total)) * 100}%`);
+  }
+  if (allowExpire && remaining <= 0) {
+    stopStudyTimer();
+    markItem("again");
+  }
+}
 function queueEntryKey(entry) {
   return `${entry.trackId}::${entry.itemId}`;
 }
@@ -472,7 +575,7 @@ function isQueueEntryEligible(entry, session = state.customStudySession) {
 }
 
 function takeNextCustomBatch(session) {
-  const size = Math.max(1, Number(session?.batchSize || state.customBatchSize || 20));
+  const size = Math.max(1, Number(session?.batchSize || state.customBatchSize || state.settings?.batchSize || 7));
   const batch = [];
   const used = new Set();
   const review = Array.isArray(session.review) ? session.review.filter((entry) => isQueueEntryEligible(entry, session)) : [];
@@ -512,12 +615,14 @@ function advanceCustomStudyBatch() {
   if (!nextBatch.length) return false;
   state.studyQueue = nextBatch;
   state.queueIndex = 0;
+  state.cardTimerStartedAt = 0;
   session.statusMap = {};
   resetCardReveal();
   showTransientNotice("\uC120\uD0DD \uD559\uC2B5 \uBAA9\uB85D\uC744 \uC0C8\uB85C \uCC44\uC6C1\uB2C8\uB2E4");
   return true;
 }
 function openCompletionPrompt() {
+  stopStudyTimer();
   state.completionPromptOpen = true;
   clearTransientNotice();
   resetCardReveal();
@@ -551,6 +656,7 @@ function moveCard(delta, decisionKind = "") {
     }
     clearTransientNotice();
     state.queueIndex = Math.min(Math.max(0, nextIndex), Math.max(0, state.studyQueue.length - 1));
+    state.cardTimerStartedAt = 0;
     resetCardReveal();
     render();
     return;
@@ -563,6 +669,7 @@ function moveCard(delta, decisionKind = "") {
     return;
   }
   state.cardIndex = Math.min(Math.max(0, nextIndex), Math.max(0, items.length - 1));
+  state.cardTimerStartedAt = 0;
   resetCardReveal();
   render();
 }
@@ -592,7 +699,15 @@ function markItem(kind) {
     progress.saved.includes(item.id) ? removeValue(progress.saved, item.id) : uniquePush(progress.saved, item.id);
   }
   if (kind === "checked") {
-    progress.checked.includes(item.id) ? removeValue(progress.checked, item.id) : uniquePush(progress.checked, item.id);
+    const wasChecked = progress.checked.includes(item.id);
+    wasChecked ? removeValue(progress.checked, item.id) : uniquePush(progress.checked, item.id);
+    saveProgress();
+    if (!wasChecked && state.settings?.checkAsKnown && state.route === "study") {
+      markItem("known");
+      return;
+    }
+    render();
+    return;
   }
   saveProgress();
   if (kind === "known" || kind === "again") moveCard(1, kind);
@@ -725,6 +840,7 @@ function allStageOptions() {
       const progress = ensureTrackProgress(track.id);
       const checked = new Set(progress.checked);
       const done = items.filter((item) => checked.has(item.id)).length;
+      const unchecked = items.filter((item) => !checked.has(item.id)).length;
       return {
         key: stageKey(track.id, index),
         track,
@@ -733,6 +849,7 @@ function allStageOptions() {
         items,
         done,
         total: items.length,
+        unchecked,
         percent: Math.round((done / Math.max(1, items.length)) * 100),
         deckComplete: isStageComplete(track, index),
       };
@@ -760,6 +877,7 @@ function startQueue(entries, title, customStudySession = null) {
   state.studyQueue = entries;
   state.queueIndex = 0;
   state.cardIndex = 0;
+  state.cardTimerStartedAt = 0;
   state.studyTitle = title;
   resetCardReveal();
   setRoute("study");
@@ -795,7 +913,7 @@ function startSelectedStudy() {
   const sourceEntries = queueFromStageOptions(options).filter((entry) => !state.customExcludeChecked || !isCheckedQueueEntry(entry));
   const session = {
     mode: "selected",
-    batchSize: Math.max(1, state.customBatchSize || 20),
+    batchSize: Math.max(1, state.customBatchSize || state.settings?.batchSize || 7),
     excludeChecked: state.customExcludeChecked,
     totalEntries: sourceEntries.length,
     completedEntryMap: {},
@@ -874,8 +992,56 @@ function renderHome() {
         </button>
       </div>
       <div class="home-version">v ${APP_VERSION}</div>
+      <button class="settings-fab" type="button" data-action="settings-open" aria-label="\uC124\uC815">&#9881;</button>
+      ${state.settingsOpen ? renderSettingsModal() : ""}
     </section>
   `, { home: true });
+}
+
+function renderSettingsModal() {
+  const settings = state.settings || DEFAULT_SETTINGS;
+  return `
+    <div class="modal-backdrop settings-backdrop" role="dialog" aria-modal="true" aria-label="\uC124\uC815">
+      <div class="modal-panel section-card settings-modal">
+        <div class="settings-head">
+          <div class="settings-title">\uC124\uC815</div>
+          <button class="home-utility-button" type="button" data-action="settings-close">\uB2EB\uAE30</button>
+        </div>
+        <div class="settings-list">
+          <section class="settings-row">
+            <div>
+              <strong>\uC120\uD0DD \uAE30\uBCF8 \uAC1C\uC218</strong>
+              <span>\uC120\uD0DD \uD559\uC2B5\uC5D0\uC11C \uBA87 \uAC1C\uC529 \uB3CC\uB9B4\uC9C0</span>
+            </div>
+            <div class="settings-segment">
+              <button class="stage-preview-filter is-active" type="button" data-action="setting-toggle-batch">${settings.batchSize}\uAC1C</button>
+            </div>
+          </section>
+          <label class="settings-row settings-row--toggle">
+            <div>
+              <strong>v = \uC54C\uACE0\uC788\uC74C</strong>
+              <span>\uCE74\uB4DC \uCCB4\uD06C\uB97C \uB204\uB974\uBA74 \uC54C\uACE0\uC788\uC74C\uB3C4 \uAC19\uC774 \uCC98\uB9AC</span>
+            </div>
+            <input type="checkbox" ${settings.checkAsKnown ? "checked" : ""} data-setting-toggle="checkAsKnown">
+          </label>
+          <label class="settings-row settings-row--toggle">
+            <div>
+              <strong>\uD0C0\uC774\uBA38</strong>
+              <span>\uC2DC\uAC04\uC774 \uC9C0\uB098\uBA74 \uACF5\uBD80\uD558\uACA0\uC74C\uC73C\uB85C \uCC98\uB9AC</span>
+            </div>
+            <input type="checkbox" ${settings.timerEnabled ? "checked" : ""} data-setting-toggle="timerEnabled">
+          </label>
+          <section class="settings-row settings-row--compact">
+            <label>\uCD08 <input class="settings-number" type="number" min="3" max="300" value="${escapeHtml(settings.timerSeconds)}" data-setting-number="timerSeconds"></label>
+            <label>\uD14C\uB9C8 <select class="settings-select" data-setting-select="timerTheme">
+              <option value="number" ${settings.timerTheme === "number" ? "selected" : ""}>\uC22B\uC790</option>
+              <option value="circle" ${settings.timerTheme === "circle" ? "selected" : ""}>\uC6D0</option>
+            </select></label>
+          </section>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderWordHome() {
@@ -1331,6 +1497,13 @@ function studyProgressText(itemNumber, batchTotal) {
   return `${totalText}&nbsp;&nbsp;${batchText}`;
 }
 
+function renderStudyTimer() {
+  if (!state.settings?.timerEnabled) return "";
+  const remaining = timerRemainingSeconds();
+  const theme = state.settings.timerTheme || "number";
+  return `<div class="study-timer study-timer--${escapeHtml(theme)}" aria-label="\uD0C0\uC774\uBA38"><span data-study-timer-value>${remaining}</span></div>`;
+}
+
 function renderStudy() {
   const track = currentTrack();
   if (!track) {
@@ -1366,7 +1539,7 @@ function renderStudy() {
               <span class="page-subtitle">\uC601\uC5B4\uB97C \uBCF4\uACE0 \uB73B\uC744 \uB5A0\uC62C\uB9B0 \uB4A4 \uD655\uC778</span>
             </div>
           </div>
-          <div class="study-progress">${progressText}</div>
+          <div class="study-head-right">${renderStudyTimer()}<div class="study-progress">${progressText}</div></div>
         </div>
         <div class="study-summary-row">
           <div class="study-summary-left">
@@ -1384,6 +1557,7 @@ function renderStudy() {
       ${renderCompletionPrompt()}
     </div>
   `, { home: true });
+  ensureStudyTimer();
 }
 function synonymText(item) {
   if (Array.isArray(item.synonyms)) return item.synonyms.filter(Boolean).join(" / ");
@@ -1403,7 +1577,7 @@ function renderStudyCard(item, current, total, saved, checked, track) {
   const exampleKoVisible = Boolean(reveal.exampleKo && hasExampleKo);
 
   return `
-    <div class="card-panel">
+    <div class="card-panel" data-card-toggle-all>
       ${state.transientNotice ? `<div class="transient-notice" aria-live="polite">${escapeHtml(state.transientNotice)}</div>` : ""}
       <button class="card-speak-button" type="button" data-action="speak" aria-label="\uB2E8\uC5B4 \uBC1C\uC74C \uB4E3\uAE30">&#128266;</button>
       <button class="card-check-button${checked ? " is-active" : ""}" type="button" data-action="check" aria-label="${checked ? "\uCCB4\uD06C \uD574\uC81C" : "\uCCB4\uD06C \uC800\uC7A5"}">&#9989;</button>
@@ -1668,7 +1842,7 @@ function renderCustomSelect() {
                     ${trackCollapsed ? "" : `<div class="custom-stage-chip-grid">
                       ${track.options.map((option, index) => `
                         <button class="custom-stage-chip${selected.has(option.key) ? " is-active" : ""}${option.deckComplete ? " is-complete" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
-                          ${String(index + 1).padStart(2, "0")}
+                          ${state.customShowUncheckedCounts ? option.unchecked.toLocaleString() : String(index + 1).padStart(2, "0")}
                         </button>
                       `).join("")}
                     </div>`}
@@ -1686,8 +1860,8 @@ function renderCustomSelect() {
         </div>
         <div class="custom-select-controls">
           <button class="stage-preview-filter" type="button" data-action="custom-clear" ${selected.size ? "" : "disabled"}>\uD574\uC81C</button>
-          <button class="stage-preview-filter${state.customBatchSize === 7 ? " is-active" : ""}" type="button" data-custom-batch="7">7\uAC1C</button>
-          <button class="stage-preview-filter${state.customBatchSize === 20 ? " is-active" : ""}" type="button" data-custom-batch="20">20\uAC1C</button>
+          <button class="stage-preview-filter${state.customShowUncheckedCounts ? " is-active" : ""}" type="button" data-action="custom-toggle-counts">${state.customShowUncheckedCounts ? "01" : "\uBBF8\uCCB4\uD06C"}</button>
+          <button class="stage-preview-filter is-active" type="button" data-action="custom-toggle-batch">${state.customBatchSize}\uAC1C</button>
           <button class="stage-preview-filter${state.customExcludeChecked ? " is-active" : ""}" type="button" data-action="custom-toggle-checked" aria-pressed="${state.customExcludeChecked ? "true" : "false"}">v \uD3EC\uD568</button>
           <button class="big-button big-button--accent custom-select-start" type="button" data-action="custom-selected" ${selected.size && selectedCards ? "" : "disabled"}>
             <div class="big-button__title">\uC2DC\uC791</div>
@@ -1790,7 +1964,7 @@ function pollGamepad() {
 }
 function bindEvents() {
   document.addEventListener("click", (event) => {
-    const target = event.target.closest("button, input, [data-action='home']");
+    const target = event.target.closest("button, input, [data-card-toggle-all], [data-action='home']");
     if (!target) return;
     if (target.dataset.vocabKind) state.group = target.dataset.vocabKind;
     if (target.dataset.group) state.group = target.dataset.group;
@@ -1841,6 +2015,10 @@ function bindEvents() {
       toggleCardReveal(target.dataset.cardReveal);
       return;
     }
+    if (target.dataset.cardToggleAll !== undefined) {
+      toggleAllCardReveal();
+      return;
+    }
     const action = target.dataset.action;
     if (action === "progress-open") {
       state.progressOpen = true;
@@ -1860,6 +2038,23 @@ function bindEvents() {
     }
     if (action === "completion-yes") {
       confirmCompletionPrompt();
+      return;
+    }
+    if (action === "settings-open") {
+      state.settingsOpen = true;
+      render();
+      return;
+    }
+    if (action === "settings-close") {
+      state.settingsOpen = false;
+      render();
+      return;
+    }
+    if (action === "setting-toggle-batch") {
+      state.settings.batchSize = state.settings.batchSize === 7 ? 20 : 7;
+      state.customBatchSize = state.settings.batchSize;
+      saveSettings();
+      render();
       return;
     }
     if (action === "saved-list-open") {
@@ -1883,8 +2078,13 @@ function bindEvents() {
       render();
       return;
     }
-    if (target.dataset.customBatch) {
-      state.customBatchSize = Number(target.dataset.customBatch) || 20;
+    if (action === "custom-toggle-counts") {
+      state.customShowUncheckedCounts = !state.customShowUncheckedCounts;
+      render();
+      return;
+    }
+    if (action === "custom-toggle-batch") {
+      state.customBatchSize = state.customBatchSize === 7 ? 20 : 7;
       render();
       return;
     }
@@ -1947,6 +2147,29 @@ function bindEvents() {
       state.scriptText = defaultScriptText();
       state.scriptIndex = 0;
       saveScript();
+      render();
+    }
+  });
+
+  document.addEventListener("change", (event) => {
+    const target = event.target;
+    if (target.dataset.settingToggle) {
+      state.settings[target.dataset.settingToggle] = Boolean(target.checked);
+      saveSettings();
+      state.cardTimerStartedAt = 0;
+      render();
+      return;
+    }
+    if (target.dataset.settingSelect) {
+      state.settings[target.dataset.settingSelect] = target.value;
+      saveSettings();
+      render();
+      return;
+    }
+    if (target.dataset.settingNumber) {
+      state.settings[target.dataset.settingNumber] = Math.max(3, Math.min(300, Number(target.value || DEFAULT_SETTINGS.timerSeconds)));
+      saveSettings();
+      state.cardTimerStartedAt = 0;
       render();
     }
   });
