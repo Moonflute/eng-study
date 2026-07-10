@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.41";
+const APP_VERSION = "0.0.42";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1598,15 +1598,10 @@ function renderSavedListModal() {
             if (!track || !item) return "";
             const key = `${escapeHtml(entry.trackId)}::${escapeHtml(entry.itemId)}`;
             return `
-              <div class="saved-list-row">
-                <div class="saved-list-word">
-                  <strong>${escapeHtml(item.primary)}</strong>
-                  <span>${escapeHtml(item.meaning || "")}</span>
-                  <em>${escapeHtml(displayTrackTitle(track))}</em>
-                </div>
-                <div class="saved-list-actions">
-                  <button class="home-utility-button" type="button" data-unsave-item="${key}">\uD574\uC81C</button>
-                </div>
+              <div class="saved-list-row" title="${escapeHtml(displayTrackTitle(track))}">
+                <span class="saved-list-term">${escapeHtml(item.primary)}</span>
+                <span class="saved-list-meaning">${escapeHtml(item.meaning || "")}</span>
+                <button class="saved-list-remove" type="button" data-unsave-item="${key}">\uD574\uC81C</button>
               </div>
             `;
           }).join("") : `<div class="empty">\uC800\uC7A5\uB41C \uB2E8\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</div>`}

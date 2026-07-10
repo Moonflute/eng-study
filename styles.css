@@ -2017,41 +2017,45 @@ button {
 
 .saved-list-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(78px, 0.75fr) minmax(0, 1fr) auto;
+  gap: 8px;
   align-items: center;
-  padding: 12px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   background: #fffdf8;
 }
 
-.saved-list-word strong {
-  display: block;
+.saved-list-term,
+.saved-list-meaning {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-list-term {
   color: var(--ink);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 950;
 }
 
-.saved-list-word span,
-.saved-list-word em {
-  display: block;
-  margin-top: 4px;
+.saved-list-meaning {
   color: var(--muted);
   font-size: 12px;
-  font-style: normal;
   font-weight: 750;
 }
 
-.saved-list-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.saved-list-actions .home-utility-button {
-  min-height: 34px;
-  padding: 0 10px;
-  font-size: 12px;
+.saved-list-remove {
+  min-width: 42px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.96);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
 }
 
 @media (max-width: 420px) {
@@ -2060,11 +2064,18 @@ button {
   }
 
   .saved-list-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(66px, 0.7fr) minmax(0, 1fr) auto;
+    gap: 6px;
+    padding: 8px;
   }
 
-  .saved-list-actions {
-    justify-content: flex-end;
+  .saved-list-term {
+    font-size: 13px;
+  }
+
+  .saved-list-remove {
+    min-width: 38px;
+    padding-inline: 6px;
   }
 }
 .card-frame {
