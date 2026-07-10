@@ -2287,13 +2287,24 @@ button {
   border-radius: 24px;
 }
 
+.study-info-card .study-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  gap: 14px;
+  align-items: center;
+}
+
+.study-head-main {
+  min-width: 0;
+}
+
 .study-info-card .page-title--study {
   font-size: clamp(18px, 4.8vw, 22px);
   line-height: 1.2;
 }
 
 .study-info-card .study-progress {
-  min-width: 54px;
+  margin-top: 58px;
   color: var(--muted);
   font-size: 14px;
   font-weight: 850;
@@ -2330,7 +2341,6 @@ button {
 }
 
 @media (max-width: 520px) {
-  .study-info-card .study-head,
   .study-info-card .study-summary-row {
     align-items: flex-start;
   }
@@ -3371,6 +3381,43 @@ button {
   accent-color: var(--brand);
 }
 
+.settings-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.settings-row--timer {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.settings-row--timer input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--brand);
+}
+
+.settings-timer-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.settings-row--timer.is-disabled .settings-timer-controls {
+  opacity: 0.42;
+  filter: grayscale(1);
+}
+
+.settings-row--timer.is-disabled .settings-number,
+.settings-row--timer.is-disabled .settings-select {
+  cursor: not-allowed;
+  background: rgba(245, 247, 248, 0.74);
+  color: rgba(110, 117, 111, 0.72);
+}
+
 .settings-row--compact {
   grid-template-columns: 1fr 1fr;
 }
@@ -3395,30 +3442,38 @@ button {
 
 .study-head-right {
   display: grid;
-  justify-items: end;
-  gap: 6px;
+  align-self: center;
+  justify-items: center;
 }
 
 .study-timer {
   display: grid;
   place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
   color: var(--brand);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 950;
 }
 
 .study-timer--number {
-  min-width: 34px;
-  min-height: 28px;
-  padding: 0 8px;
+  min-width: 56px;
+  min-height: 46px;
+  padding: 0 12px;
   border: 1px solid rgba(23, 68, 71, 0.2);
   border-radius: 999px;
   background: rgba(224, 247, 244, 0.92);
 }
 
+.study-timer.is-paused {
+  opacity: 0.58;
+  filter: grayscale(0.7);
+}
+
 .study-timer--circle {
-  width: 34px;
-  height: 34px;
+  width: 58px;
+  height: 58px;
   border-radius: 999px;
   background: conic-gradient(var(--brand) var(--timer-progress, 100%), rgba(23, 68, 71, 0.12) 0);
   color: #fffaf2;
@@ -3427,12 +3482,12 @@ button {
 
 .study-timer--circle span {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border-radius: 999px;
   background: var(--brand);
-  font-size: 11px;
+  font-size: 16px;
 }
 
 @media (max-width: 420px) {

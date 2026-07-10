@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.45";
+const APP_VERSION = "0.0.46";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -48,6 +48,8 @@ const state = {
   settings: initialSettings,
   settingsOpen: false,
   cardTimerStartedAt: 0,
+  cardTimerRemainingMs: 0,
+  cardTimerPaused: false,
   error: "",
   gamepadButtons: {},
   progressOpen: false,
@@ -360,6 +362,7 @@ function initHistory() {
 
 function setRoute(route, options = {}) {
   if (state.route === "study" && route !== "study") {
+    resetCardTimer();
     state.studyQueue = null;
     state.queueIndex = 0;
     state.customStudySession = null;
@@ -414,7 +417,7 @@ function startStage(index) {
   selectStage(index);
   const track = currentTrack();
   state.deckStudySession = track ? { trackId: track.id, stageIndex: index, statusMap: {} } : null;
-  state.cardTimerStartedAt = 0;
+  resetCardTimer();
   setRoute("study");
 }
 
@@ -509,19 +512,34 @@ function stopStudyTimer() {
   }
 }
 
+function resetCardTimer() {
+  stopStudyTimer();
+  state.cardTimerStartedAt = 0;
+  state.cardTimerRemainingMs = 0;
+  state.cardTimerPaused = false;
+}
+
 function timerDurationMs() {
   return Math.max(3, Number(state.settings?.timerSeconds || DEFAULT_SETTINGS.timerSeconds)) * 1000;
 }
 
-function timerRemainingSeconds() {
-  if (!state.cardTimerStartedAt) return Math.ceil(timerDurationMs() / 1000);
+function timerRemainingMs() {
+  if (state.cardTimerPaused) return Math.max(0, Number(state.cardTimerRemainingMs || timerDurationMs()));
+  if (!state.cardTimerStartedAt) return timerDurationMs();
+  const base = Number(state.cardTimerRemainingMs || timerDurationMs());
   const elapsed = Date.now() - state.cardTimerStartedAt;
-  return Math.max(0, Math.ceil((timerDurationMs() - elapsed) / 1000));
+  return Math.max(0, base - elapsed);
+}
+
+function timerRemainingSeconds() {
+  return Math.ceil(timerRemainingMs() / 1000);
 }
 
 function startStudyTimer() {
   stopStudyTimer();
   if (state.route !== "study" || !state.settings?.timerEnabled || state.completionPromptOpen) return;
+  state.cardTimerRemainingMs = timerDurationMs();
+  state.cardTimerPaused = false;
   state.cardTimerStartedAt = Date.now();
   studyTimerInterval = window.setInterval(tickStudyTimer, 250);
 }
@@ -531,8 +549,11 @@ function ensureStudyTimer() {
     stopStudyTimer();
     return;
   }
-  if (!state.cardTimerStartedAt) state.cardTimerStartedAt = Date.now();
-  if (!studyTimerInterval) studyTimerInterval = window.setInterval(tickStudyTimer, 250);
+  if (!state.cardTimerStartedAt && !state.cardTimerPaused) {
+    state.cardTimerRemainingMs = timerDurationMs();
+    state.cardTimerStartedAt = Date.now();
+  }
+  if (!studyTimerInterval && !state.cardTimerPaused) studyTimerInterval = window.setInterval(tickStudyTimer, 250);
   tickStudyTimer(false);
 }
 
@@ -549,6 +570,20 @@ function tickStudyTimer(allowExpire = true) {
     stopStudyTimer();
     markItem("again");
   }
+}
+
+function toggleStudyTimerPause() {
+  if (state.route !== "study" || !state.settings?.timerEnabled) return;
+  if (state.cardTimerPaused) {
+    state.cardTimerPaused = false;
+    state.cardTimerStartedAt = Date.now();
+    if (!studyTimerInterval) studyTimerInterval = window.setInterval(tickStudyTimer, 250);
+  } else {
+    state.cardTimerRemainingMs = timerRemainingMs();
+    state.cardTimerPaused = true;
+    stopStudyTimer();
+  }
+  render();
 }
 function queueEntryKey(entry) {
   return `${entry.trackId}::${entry.itemId}`;
@@ -615,7 +650,7 @@ function advanceCustomStudyBatch() {
   if (!nextBatch.length) return false;
   state.studyQueue = nextBatch;
   state.queueIndex = 0;
-  state.cardTimerStartedAt = 0;
+  resetCardTimer();
   session.statusMap = {};
   resetCardReveal();
   showTransientNotice("\uC120\uD0DD \uD559\uC2B5 \uBAA9\uB85D\uC744 \uC0C8\uB85C \uCC44\uC6C1\uB2C8\uB2E4");
@@ -656,7 +691,7 @@ function moveCard(delta, decisionKind = "") {
     }
     clearTransientNotice();
     state.queueIndex = Math.min(Math.max(0, nextIndex), Math.max(0, state.studyQueue.length - 1));
-    state.cardTimerStartedAt = 0;
+    resetCardTimer();
     resetCardReveal();
     render();
     return;
@@ -669,7 +704,7 @@ function moveCard(delta, decisionKind = "") {
     return;
   }
   state.cardIndex = Math.min(Math.max(0, nextIndex), Math.max(0, items.length - 1));
-  state.cardTimerStartedAt = 0;
+  resetCardTimer();
   resetCardReveal();
   render();
 }
@@ -877,7 +912,7 @@ function startQueue(entries, title, customStudySession = null) {
   state.studyQueue = entries;
   state.queueIndex = 0;
   state.cardIndex = 0;
-  state.cardTimerStartedAt = 0;
+  resetCardTimer();
   state.studyTitle = title;
   resetCardReveal();
   setRoute("study");
@@ -1008,15 +1043,6 @@ function renderSettingsModal() {
           <button class="home-utility-button" type="button" data-action="settings-close">\uB2EB\uAE30</button>
         </div>
         <div class="settings-list">
-          <section class="settings-row">
-            <div>
-              <strong>\uC120\uD0DD \uAE30\uBCF8 \uAC1C\uC218</strong>
-              <span>\uC120\uD0DD \uD559\uC2B5\uC5D0\uC11C \uBA87 \uAC1C\uC529 \uB3CC\uB9B4\uC9C0</span>
-            </div>
-            <div class="settings-segment">
-              <button class="stage-preview-filter is-active" type="button" data-action="setting-toggle-batch">${settings.batchSize}\uAC1C</button>
-            </div>
-          </section>
           <label class="settings-row settings-row--toggle">
             <div>
               <strong>v = \uC54C\uACE0\uC788\uC74C</strong>
@@ -1024,19 +1050,21 @@ function renderSettingsModal() {
             </div>
             <input type="checkbox" ${settings.checkAsKnown ? "checked" : ""} data-setting-toggle="checkAsKnown">
           </label>
-          <label class="settings-row settings-row--toggle">
-            <div>
-              <strong>\uD0C0\uC774\uBA38</strong>
-              <span>\uC2DC\uAC04\uC774 \uC9C0\uB098\uBA74 \uACF5\uBD80\uD558\uACA0\uC74C\uC73C\uB85C \uCC98\uB9AC</span>
+          <section class="settings-row settings-row--timer${settings.timerEnabled ? "" : " is-disabled"}">
+            <div class="settings-row-main">
+              <div>
+                <strong>\uD0C0\uC774\uBA38</strong>
+                <span>\uC2DC\uAC04\uC774 \uC9C0\uB098\uBA74 \uACF5\uBD80\uD558\uACA0\uC74C\uC73C\uB85C \uCC98\uB9AC</span>
+              </div>
+              <input type="checkbox" ${settings.timerEnabled ? "checked" : ""} data-setting-toggle="timerEnabled">
             </div>
-            <input type="checkbox" ${settings.timerEnabled ? "checked" : ""} data-setting-toggle="timerEnabled">
-          </label>
-          <section class="settings-row settings-row--compact">
-            <label>\uCD08 <input class="settings-number" type="number" min="3" max="300" value="${escapeHtml(settings.timerSeconds)}" data-setting-number="timerSeconds"></label>
-            <label>\uD14C\uB9C8 <select class="settings-select" data-setting-select="timerTheme">
-              <option value="number" ${settings.timerTheme === "number" ? "selected" : ""}>\uC22B\uC790</option>
-              <option value="circle" ${settings.timerTheme === "circle" ? "selected" : ""}>\uC6D0</option>
-            </select></label>
+            <div class="settings-timer-controls">
+              <label>\uCD08 <input class="settings-number" type="number" min="3" max="300" value="${escapeHtml(settings.timerSeconds)}" data-setting-number="timerSeconds" ${settings.timerEnabled ? "" : "disabled"}></label>
+              <label>\uD14C\uB9C8 <select class="settings-select" data-setting-select="timerTheme" ${settings.timerEnabled ? "" : "disabled"}>
+                <option value="number" ${settings.timerTheme === "number" ? "selected" : ""}>\uC22B\uC790</option>
+                <option value="circle" ${settings.timerTheme === "circle" ? "selected" : ""}>\uC6D0</option>
+              </select></label>
+            </div>
           </section>
         </div>
       </div>
@@ -1501,7 +1529,7 @@ function renderStudyTimer() {
   if (!state.settings?.timerEnabled) return "";
   const remaining = timerRemainingSeconds();
   const theme = state.settings.timerTheme || "number";
-  return `<div class="study-timer study-timer--${escapeHtml(theme)}" aria-label="\uD0C0\uC774\uBA38"><span data-study-timer-value>${remaining}</span></div>`;
+  return `<button class="study-timer study-timer--${escapeHtml(theme)}${state.cardTimerPaused ? " is-paused" : ""}" type="button" data-action="timer-toggle" aria-label="${state.cardTimerPaused ? "\uD0C0\uC774\uBA38 \uC7AC\uAC1C" : "\uD0C0\uC774\uBA38 \uC77C\uC2DC\uC815\uC9C0"}"><span data-study-timer-value>${remaining}</span></button>`;
 }
 
 function renderStudy() {
@@ -1533,13 +1561,14 @@ function renderStudy() {
       </div>
       <section class="section-card study-info-card">
         <div class="study-head">
-          <div>
+          <div class="study-head-main">
             <h1 class="page-title page-title--study">${title}</h1>
             <div class="study-inline-meta">
               <span class="page-subtitle">\uC601\uC5B4\uB97C \uBCF4\uACE0 \uB73B\uC744 \uB5A0\uC62C\uB9B0 \uB4A4 \uD655\uC778</span>
             </div>
+            <div class="study-progress">${progressText}</div>
           </div>
-          <div class="study-head-right">${renderStudyTimer()}<div class="study-progress">${progressText}</div></div>
+          <div class="study-head-right">${renderStudyTimer()}</div>
         </div>
         <div class="study-summary-row">
           <div class="study-summary-left">
@@ -1860,7 +1889,7 @@ function renderCustomSelect() {
         </div>
         <div class="custom-select-controls">
           <button class="stage-preview-filter" type="button" data-action="custom-clear" ${selected.size ? "" : "disabled"}>\uD574\uC81C</button>
-          <button class="stage-preview-filter${state.customShowUncheckedCounts ? " is-active" : ""}" type="button" data-action="custom-toggle-counts">${state.customShowUncheckedCounts ? "01" : "\uBBF8\uCCB4\uD06C"}</button>
+          <button class="stage-preview-filter${state.customShowUncheckedCounts ? " is-active" : ""}" type="button" data-action="custom-toggle-counts">${state.customShowUncheckedCounts ? "\uC774\uB984" : "\uC794\uC5EC"}</button>
           <button class="stage-preview-filter is-active" type="button" data-action="custom-toggle-batch">${state.customBatchSize}\uAC1C</button>
           <button class="stage-preview-filter${state.customExcludeChecked ? " is-active" : ""}" type="button" data-action="custom-toggle-checked" aria-pressed="${state.customExcludeChecked ? "true" : "false"}">v \uD3EC\uD568</button>
           <button class="big-button big-button--accent custom-select-start" type="button" data-action="custom-selected" ${selected.size && selectedCards ? "" : "disabled"}>
@@ -2040,6 +2069,10 @@ function bindEvents() {
       confirmCompletionPrompt();
       return;
     }
+    if (action === "timer-toggle") {
+      toggleStudyTimerPause();
+      return;
+    }
     if (action === "settings-open") {
       state.settingsOpen = true;
       render();
@@ -2047,13 +2080,6 @@ function bindEvents() {
     }
     if (action === "settings-close") {
       state.settingsOpen = false;
-      render();
-      return;
-    }
-    if (action === "setting-toggle-batch") {
-      state.settings.batchSize = state.settings.batchSize === 7 ? 20 : 7;
-      state.customBatchSize = state.settings.batchSize;
-      saveSettings();
       render();
       return;
     }
@@ -2156,7 +2182,7 @@ function bindEvents() {
     if (target.dataset.settingToggle) {
       state.settings[target.dataset.settingToggle] = Boolean(target.checked);
       saveSettings();
-      state.cardTimerStartedAt = 0;
+      resetCardTimer();
       render();
       return;
     }
@@ -2169,7 +2195,7 @@ function bindEvents() {
     if (target.dataset.settingNumber) {
       state.settings[target.dataset.settingNumber] = Math.max(3, Math.min(300, Number(target.value || DEFAULT_SETTINGS.timerSeconds)));
       saveSettings();
-      state.cardTimerStartedAt = 0;
+      resetCardTimer();
       render();
     }
   });
