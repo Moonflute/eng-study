@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.48";
+const APP_VERSION = "0.0.49";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -71,7 +71,7 @@ function loadSettings() {
     return {
       ...DEFAULT_SETTINGS,
       ...saved,
-      batchSize: [7, 20].includes(Number(saved.batchSize)) ? Number(saved.batchSize) : DEFAULT_SETTINGS.batchSize,
+      batchSize: [0, 7, 20].includes(Number(saved.batchSize)) ? Number(saved.batchSize) : DEFAULT_SETTINGS.batchSize,
       timerSeconds: Math.max(3, Math.min(300, Number(saved.timerSeconds || DEFAULT_SETTINGS.timerSeconds))),
       timerTheme: ["number", "circle"].includes(saved.timerTheme) ? saved.timerTheme : DEFAULT_SETTINGS.timerTheme,
     };
@@ -291,7 +291,7 @@ function applyRouteSnapshot(snapshot) {
   state.queueIndex = Number(next.queueIndex || 0);
   state.studyTitle = next.studyTitle || "";
   state.customStageKeys = Array.isArray(next.customStageKeys) ? next.customStageKeys : [];
-  state.customBatchSize = Number(next.customBatchSize || state.customBatchSize || state.settings?.batchSize || 7);
+  state.customBatchSize = [0, 7, 20].includes(Number(next.customBatchSize)) ? Number(next.customBatchSize) : Number(state.customBatchSize || state.settings?.batchSize || 7);
   state.customExcludeChecked = Boolean(next.customExcludeChecked);
   state.customShowUncheckedCounts = Boolean(next.customShowUncheckedCounts);
   state.customStudySession = next.customStudySession && typeof next.customStudySession === "object" ? next.customStudySession : null;
@@ -610,7 +610,8 @@ function isQueueEntryEligible(entry, session = state.customStudySession) {
 }
 
 function takeNextCustomBatch(session) {
-  const size = Math.max(1, Number(session?.batchSize || state.customBatchSize || state.settings?.batchSize || 7));
+  const selectedSize = Number(session?.batchSize ?? state.customBatchSize ?? state.settings?.batchSize ?? 7);
+  const size = selectedSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, selectedSize);
   const batch = [];
   const used = new Set();
   const review = Array.isArray(session.review) ? session.review.filter((entry) => isQueueEntryEligible(entry, session)) : [];
@@ -948,7 +949,7 @@ function startSelectedStudy() {
   const sourceEntries = queueFromStageOptions(options).filter((entry) => !state.customExcludeChecked || !isCheckedQueueEntry(entry));
   const session = {
     mode: "selected",
-    batchSize: Math.max(1, state.customBatchSize || state.settings?.batchSize || 7),
+    batchSize: [0, 7, 20].includes(Number(state.customBatchSize)) ? Number(state.customBatchSize) : Math.max(1, state.customBatchSize || state.settings?.batchSize || 7),
     excludeChecked: state.customExcludeChecked,
     totalEntries: sourceEntries.length,
     completedEntryMap: {},
@@ -1600,7 +1601,7 @@ function renderStudyCard(item, current, total, saved, checked, track) {
 
   return `
     <div class="card-panel" data-card-toggle-all>
-      ${state.transientNotice ? `<div class="transient-notice" aria-live="polite">${escapeHtml(state.transientNotice)}</div>` : ""}
+      ${state.transientNotice ? `<button class="transient-notice" type="button" data-action="transient-close" aria-live="polite">${escapeHtml(state.transientNotice)}</button>` : ""}
       <button class="card-speak-button" type="button" data-action="speak" aria-label="\uB2E8\uC5B4 \uBC1C\uC74C \uB4E3\uAE30">&#128266;</button>
       <button class="card-check-button${checked ? " is-active" : ""}" type="button" data-action="check" aria-label="${checked ? "\uCCB4\uD06C \uD574\uC81C" : "\uCCB4\uD06C \uC800\uC7A5"}">&#9989;</button>
       <button class="card-bookmark-button${saved ? " is-active" : ""}" type="button" data-action="save" aria-label="${saved ? "\uC800\uC7A5 \uD574\uC81C" : "\uC800\uC7A5"}">&#128278;</button>
@@ -1883,8 +1884,8 @@ function renderCustomSelect() {
         <div class="custom-select-controls">
           <button class="stage-preview-filter" type="button" data-action="custom-clear" ${selected.size ? "" : "disabled"}>\uD574\uC81C</button>
           <button class="stage-preview-filter${state.customShowUncheckedCounts ? " is-active" : ""}" type="button" data-action="custom-toggle-counts">${state.customShowUncheckedCounts ? "\uC774\uB984" : "\uC794\uC5EC"}</button>
-          <button class="stage-preview-filter is-active" type="button" data-action="custom-toggle-batch">${state.customBatchSize}\uAC1C</button>
-          <button class="stage-preview-filter${state.customExcludeChecked ? " is-active" : ""}" type="button" data-action="custom-toggle-checked" aria-pressed="${state.customExcludeChecked ? "true" : "false"}">v \uD3EC\uD568</button>
+          <button class="stage-preview-filter is-active" type="button" data-action="custom-toggle-batch">${state.customBatchSize === 0 ? "\uBB34\uC81C\uD55C" : `${state.customBatchSize}\uAC1C`}</button>
+          <button class="stage-preview-filter" type="button" data-action="custom-toggle-checked" aria-pressed="${state.customExcludeChecked ? "true" : "false"}">${state.customExcludeChecked ? "v \uBBF8\uD3EC\uD568" : "v \uD3EC\uD568"}</button>
           <button class="big-button big-button--accent custom-select-start" type="button" data-action="custom-selected" ${selected.size && selectedCards ? "" : "disabled"}>
             <div class="big-button__title">\uC2DC\uC791</div>
           </button>
@@ -2066,6 +2067,11 @@ function bindEvents() {
       toggleStudyTimerPause();
       return;
     }
+    if (action === "transient-close") {
+      clearTransientNotice();
+      render();
+      return;
+    }
     if (action === "settings-open") {
       state.settingsOpen = true;
       render();
@@ -2103,7 +2109,7 @@ function bindEvents() {
       return;
     }
     if (action === "custom-toggle-batch") {
-      state.customBatchSize = state.customBatchSize === 7 ? 20 : 7;
+      state.customBatchSize = state.customBatchSize === 7 ? 20 : state.customBatchSize === 20 ? 0 : 7;
       render();
       return;
     }
