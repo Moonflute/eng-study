@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.50";
+const APP_VERSION = "0.0.51";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1934,7 +1934,7 @@ function renderCustomSelect() {
         </div>
         <div class="custom-select-controls">
           <button class="stage-preview-filter" type="button" data-action="custom-clear" ${selected.size ? "" : "disabled"}>\uD574\uC81C</button>
-          <button class="stage-preview-filter" type="button" data-action="custom-toggle-counts">${state.customShowUncheckedCounts ? "\uC774\uB984" : "\uC794\uC5EC"}</button>
+          <button class="stage-preview-filter" type="button" data-action="custom-toggle-counts">${state.customShowUncheckedCounts ? "\uC794\uC5EC" : "\uC774\uB984"}</button>
           <button class="stage-preview-filter is-active" type="button" data-action="custom-toggle-batch">${state.customBatchSize === 0 ? "\uBB34\uC81C\uD55C" : `${state.customBatchSize}\uAC1C`}</button>
           <button class="stage-preview-filter" type="button" data-action="custom-toggle-checked" aria-pressed="${state.customExcludeChecked ? "true" : "false"}">${state.customExcludeChecked ? "v \uBBF8\uD3EC\uD568" : "v \uD3EC\uD568"}</button>
           <button class="big-button big-button--accent custom-select-start" type="button" data-action="custom-selected" ${selected.size && selectedCards ? "" : "disabled"}>
