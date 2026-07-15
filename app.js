@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.49";
+const APP_VERSION = "0.0.50";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -27,6 +27,7 @@ const state = {
   customExcludeChecked: false,
   customShowUncheckedCounts: false,
   customStudySession: null,
+  pausedCustomStudy: null,
   deckStudySession: null,
   transientNotice: "",
   completionPromptOpen: false,
@@ -252,6 +253,7 @@ function routeSnapshot() {
     customExcludeChecked: state.customExcludeChecked,
     customShowUncheckedCounts: state.customShowUncheckedCounts,
     customStudySession: state.customStudySession,
+    pausedCustomStudy: state.pausedCustomStudy,
     deckStudySession: state.deckStudySession,
     transientNotice: state.transientNotice,
     completionPromptOpen: state.completionPromptOpen,
@@ -295,6 +297,7 @@ function applyRouteSnapshot(snapshot) {
   state.customExcludeChecked = Boolean(next.customExcludeChecked);
   state.customShowUncheckedCounts = Boolean(next.customShowUncheckedCounts);
   state.customStudySession = next.customStudySession && typeof next.customStudySession === "object" ? next.customStudySession : null;
+  state.pausedCustomStudy = next.pausedCustomStudy && typeof next.pausedCustomStudy === "object" ? next.pausedCustomStudy : null;
   state.deckStudySession = next.deckStudySession && typeof next.deckStudySession === "object" ? next.deckStudySession : null;
   state.transientNotice = next.transientNotice || "";
   state.completionPromptOpen = Boolean(next.completionPromptOpen);
@@ -316,6 +319,46 @@ function applyRouteSnapshot(snapshot) {
   window.scrollTo({ top: 0, behavior: "auto" });
 }
 
+function rememberSelectedStudySession() {
+  if (state.route !== "study" || state.customStudySession?.mode !== "selected" || !Array.isArray(state.studyQueue) || !state.studyQueue.length) return;
+  state.pausedCustomStudy = {
+    studyQueue: [...state.studyQueue],
+    queueIndex: Math.min(Math.max(0, Number(state.queueIndex || 0)), Math.max(0, state.studyQueue.length - 1)),
+    studyTitle: state.studyTitle || "\uC120\uD0DD",
+    customStudySession: state.customStudySession,
+  };
+}
+
+function clearSelectedStudySession() {
+  state.pausedCustomStudy = null;
+}
+
+function resumeSelectedStudySession() {
+  const paused = state.pausedCustomStudy;
+  if (!paused || !Array.isArray(paused.studyQueue) || !paused.studyQueue.length) {
+    setRoute("custom-select");
+    return;
+  }
+  const queue = paused.studyQueue.filter((entry) => findItem(entry.trackId, entry.itemId));
+  if (!queue.length) {
+    clearSelectedStudySession();
+    setRoute("custom-select");
+    return;
+  }
+  state.studyQueue = queue;
+  state.queueIndex = Math.min(Math.max(0, Number(paused.queueIndex || 0)), Math.max(0, queue.length - 1));
+  state.customStudySession = paused.customStudySession && typeof paused.customStudySession === "object" ? paused.customStudySession : null;
+  state.studyTitle = paused.studyTitle || "\uC120\uD0DD";
+  clearSelectedStudySession();
+  resetCardTimer();
+  resetCardReveal();
+  setRoute("study");
+}
+
+function endPausedSelectedStudy() {
+  clearSelectedStudySession();
+  render();
+}
 function parentRouteForCurrentState() {
   if (state.completionPromptOpen || state.progressOpen || state.savedListOpen || state.settingsOpen || state.stagePreviewIndex !== null) return state.route;
   if (state.route === "study") return Array.isArray(state.studyQueue) ? "custom" : "track";
@@ -342,6 +385,7 @@ function goParentRoute(options = {}) {
     return true;
   }
   if (state.route === "study") {
+    rememberSelectedStudySession();
     state.studyQueue = null;
     state.queueIndex = 0;
     state.customStudySession = null;
@@ -362,6 +406,7 @@ function initHistory() {
 
 function setRoute(route, options = {}) {
   if (state.route === "study" && route !== "study") {
+    rememberSelectedStudySession();
     resetCardTimer();
     state.studyQueue = null;
     state.queueIndex = 0;
@@ -676,6 +721,7 @@ function confirmCompletionPrompt() {
   state.studyQueue = null;
   state.queueIndex = 0;
   state.customStudySession = null;
+  clearSelectedStudySession();
   state.deckStudySession = null;
   clearTransientNotice();
   setRoute(destination);
@@ -944,6 +990,7 @@ function isCheckedQueueEntry(entry) {
 }
 
 function startSelectedStudy() {
+  clearSelectedStudySession();
   const selected = new Set(state.customStageKeys);
   const options = allStageOptions().filter((option) => selected.has(option.key));
   const sourceEntries = queueFromStageOptions(options).filter((entry) => !state.customExcludeChecked || !isCheckedQueueEntry(entry));
@@ -1754,6 +1801,7 @@ function renderScript() {
 }
 function renderCustomMenu() {
   const savedCount = savedQueueEntries().length;
+  const hasPausedSelectedStudy = Boolean(state.pausedCustomStudy?.studyQueue?.length);
   renderShell(`
     <div class="legacy-screen">
       <div class="home-nav-row">
@@ -1768,10 +1816,13 @@ function renderCustomMenu() {
           <strong>\uC9C4\uD589</strong>
           <span>\uAC00\uC7A5 \uB35C \uC9C4\uD589\uB41C \uBB49\uCE58\uBD80\uD130 \uCC28\uB840\uB300\uB85C \uD559\uC2B5\uD569\uB2C8\uB2E4.</span>
         </button>
-        <button class="custom-option-card" type="button" data-route="custom-select">
-          <strong>\uC120\uD0DD</strong>
-          <span>\uC5EC\uB7EC \uBB49\uCE58\uB97C \uACE0\uB974\uACE0 \uBB36\uC5B4\uC11C \uD559\uC2B5</span>
-        </button>
+        <div class="custom-select-resume-row${hasPausedSelectedStudy ? " has-paused" : ""}">
+          <button class="custom-option-card" type="button" ${hasPausedSelectedStudy ? 'data-action="custom-resume-selected"' : 'data-route="custom-select"'}>
+            <strong>\uC120\uD0DD</strong>
+            <span>${hasPausedSelectedStudy ? "\uC9C4\uD589 \uC911\uC778 \uC120\uD0DD \uD559\uC2B5\uC744 \uC7AC\uAC1C" : "\uC5EC\uB7EC \uBB49\uCE58\uB97C \uACE0\uB974\uACE0 \uBB36\uC5B4\uC11C \uD559\uC2B5"}</span>
+          </button>
+          ${hasPausedSelectedStudy ? `<button class="home-utility-button custom-early-end" type="button" data-action="custom-end-selected">[\uC870\uAE30\uC885\uB8CC]</button>` : ""}
+        </div>
         <div class="custom-saved-row">
           <button class="custom-option-card" type="button" data-action="custom-saved" ${savedCount ? "" : "disabled"}>
             <strong>\uC800\uC7A5</strong>
@@ -1883,7 +1934,7 @@ function renderCustomSelect() {
         </div>
         <div class="custom-select-controls">
           <button class="stage-preview-filter" type="button" data-action="custom-clear" ${selected.size ? "" : "disabled"}>\uD574\uC81C</button>
-          <button class="stage-preview-filter${state.customShowUncheckedCounts ? " is-active" : ""}" type="button" data-action="custom-toggle-counts">${state.customShowUncheckedCounts ? "\uC774\uB984" : "\uC794\uC5EC"}</button>
+          <button class="stage-preview-filter" type="button" data-action="custom-toggle-counts">${state.customShowUncheckedCounts ? "\uC774\uB984" : "\uC794\uC5EC"}</button>
           <button class="stage-preview-filter is-active" type="button" data-action="custom-toggle-batch">${state.customBatchSize === 0 ? "\uBB34\uC81C\uD55C" : `${state.customBatchSize}\uAC1C`}</button>
           <button class="stage-preview-filter" type="button" data-action="custom-toggle-checked" aria-pressed="${state.customExcludeChecked ? "true" : "false"}">${state.customExcludeChecked ? "v \uBBF8\uD3EC\uD568" : "v \uD3EC\uD568"}</button>
           <button class="big-button big-button--accent custom-select-start" type="button" data-action="custom-selected" ${selected.size && selectedCards ? "" : "disabled"}>
@@ -2091,6 +2142,14 @@ function bindEvents() {
       applySavedListChanges();
       state.savedListOpen = false;
       render();
+      return;
+    }
+    if (action === "custom-resume-selected") {
+      resumeSelectedStudySession();
+      return;
+    }
+    if (action === "custom-end-selected") {
+      endPausedSelectedStudy();
       return;
     }
     if (action === "custom-clear") {

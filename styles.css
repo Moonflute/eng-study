@@ -936,11 +936,22 @@ button {
   line-height: 1.45;
 }
 
+.custom-select-resume-row,
 .custom-saved-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: end;
+}
+
+.custom-select-resume-row:not(.has-paused) {
+  grid-template-columns: 1fr;
+}
+
+.custom-early-end {
+  align-self: end;
+  margin-bottom: 10px;
+  white-space: nowrap;
 }
 
 .saved-side-actions {
@@ -1004,12 +1015,19 @@ button {
     border-radius: 22px;
   }
 
+  .custom-select-resume-row,
   .custom-saved-row {
     grid-template-columns: 1fr;
   }
 
+  .custom-early-end,
   .saved-side-actions {
     justify-content: flex-end;
+  }
+
+  .custom-early-end {
+    justify-self: end;
+    margin-bottom: 0;
   }
 }
 .study-layout--queue {
