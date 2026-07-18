@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.51";
+const APP_VERSION = "0.0.52";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -984,6 +984,18 @@ function toggleCustomStage(key) {
   state.customStageKeys = [...selected];
   render();
 }
+function toggleCustomTrack(trackKey) {
+  const options = allStageOptions().filter((option) => option.track.id === trackKey);
+  if (!options.length) return;
+  const selected = new Set(state.customStageKeys);
+  const allSelected = options.every((option) => selected.has(option.key));
+  for (const option of options) {
+    if (allSelected) selected.delete(option.key);
+    else selected.add(option.key);
+  }
+  state.customStageKeys = [...selected];
+  render();
+}
 
 function isCheckedQueueEntry(entry) {
   return ensureTrackProgress(entry.trackId).checked.includes(entry.itemId);
@@ -1909,10 +1921,15 @@ function renderCustomSelect() {
                 const trackCollapsed = Boolean(state.customCollapsedTracks[track.trackKey]);
                 return `
                   <div class="custom-select-track${trackCollapsed ? " is-collapsed" : ""}">
-                    <button class="custom-select-track__head" type="button" data-custom-collapse="track:${escapeHtml(track.trackKey)}" aria-expanded="${trackCollapsed ? "false" : "true"}">
-                      <h4>${escapeHtml(track.trackTitle)}</h4>
-                      <span>${selectedCount}/${track.options.length}</span>
-                    </button>
+                    <div class="custom-select-track__head">
+                      <label class="custom-track-check" data-custom-track-select="${escapeHtml(track.trackKey)}">
+                        <input type="checkbox" data-custom-track-select="${escapeHtml(track.trackKey)}" ${selectedCount === track.options.length ? "checked" : ""} aria-label="${escapeHtml(track.trackTitle)} 전체 선택">
+                        <span>${escapeHtml(track.trackTitle)}</span>
+                      </label>
+                      <button class="custom-select-track__toggle" type="button" data-custom-collapse="track:${escapeHtml(track.trackKey)}" aria-expanded="${trackCollapsed ? "false" : "true"}">
+                        <span>${selectedCount}/${track.options.length}</span>
+                      </button>
+                    </div>
                     ${trackCollapsed ? "" : `<div class="custom-stage-chip-grid">
                       ${track.options.map((option, index) => `
                         <button class="custom-stage-chip${selected.has(option.key) ? " is-active" : ""}${option.deckComplete ? " is-complete" : ""}" type="button" data-custom-stage="${escapeHtml(option.key)}">
@@ -2038,7 +2055,7 @@ function pollGamepad() {
 }
 function bindEvents() {
   document.addEventListener("click", (event) => {
-    const target = event.target.closest("button, input, [data-card-toggle-all], [data-action='home']");
+    const target = event.target.closest("button, input, [data-custom-track-select], [data-card-toggle-all], [data-action='home']");
     if (!target) return;
     if (target.dataset.vocabKind) state.group = target.dataset.vocabKind;
     if (target.dataset.group) state.group = target.dataset.group;
@@ -2177,6 +2194,11 @@ function bindEvents() {
     if (action === "custom-selected") startSelectedStudy();
     if (action === "clear-saved") {
       if (window.confirm("\uC800\uC7A5\uB41C \uB2E8\uC5B4\uB97C \uBAA8\uB450 \uD574\uC81C\uD560\uAE4C\uC694?")) clearSavedItems();
+      return;
+    }
+    if (target.dataset.customTrackSelect) {
+      event.preventDefault();
+      toggleCustomTrack(target.dataset.customTrackSelect);
       return;
     }
     if (target.dataset.customCollapse) {

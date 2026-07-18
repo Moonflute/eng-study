@@ -3525,3 +3525,71 @@ button {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 }
+
+.custom-track-check {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.custom-track-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--brand);
+}
+
+.custom-track-check span {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 950;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-select-track__toggle {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.custom-select-track__head::before,
+.custom-select-track.is-collapsed > .custom-select-track__head::before {
+  content: none;
+}
+
+.custom-select-track__toggle::before {
+  content: "v";
+  color: var(--brand);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.custom-select-track.is-collapsed .custom-select-track__toggle::before {
+  content: ">";
+}
+.custom-select-track__head .custom-track-check span {
+  margin-left: 0;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.custom-select-track__head .custom-select-track__toggle span {
+  margin-left: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
