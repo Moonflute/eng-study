@@ -3593,3 +3593,14 @@ button {
   font-size: 12px;
   font-weight: 850;
 }
+.settings-row--remote {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+.settings-row--remote span {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.45;
+  word-break: keep-all;
+}

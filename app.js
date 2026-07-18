@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.52";
+const APP_VERSION = "0.0.53";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1125,6 +1125,10 @@ function renderSettingsModal() {
                 <option value="circle" ${settings.timerTheme === "circle" ? "selected" : ""}>\uC6D0</option>
               </select></label>
             </div>
+          </section>
+          <section class="settings-row settings-row--remote">
+            <strong>\uBE14\uB8E8\uD22C\uC2A4 \uB9AC\uBAA8\uCEE8</strong>
+            <span>8BitDo button \uAE30\uC900: 0 \uC54C\uACE0\uC788\uC74C ， 1 \uB73B \uBCF4\uAE30 ， 2 \uACF5\uBD80\uD558\uACA0\uC74C ， 3 \uCCB4\uD06C ， 4 \uC774\uC804 ， 5 \uC800\uC7A5 ， 6 \uB2E4\uC74C ， 7 \uCCB4\uD06C</span>
           </section>
         </div>
       </div>
