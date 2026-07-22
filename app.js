@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.55";
+const APP_VERSION = "0.0.56";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -156,6 +156,68 @@ function normalizeGroup(group) {
   return "other";
 }
 
+function normalizeStudyTerm(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function matchingVocabularyEntries(trackId, itemId) {
+  const source = findItem(trackId, itemId);
+  const normalized = normalizeStudyTerm(source?.primary);
+  if (!normalized) return [{ trackId, itemId }];
+  const sourceTrack = findTrack(trackId);
+  if (!sourceTrack || !["toeic", "toefl"].includes(vocabKind(sourceTrack))) return [{ trackId, itemId }];
+  const entries = [];
+  for (const track of state.tracks) {
+    if (!["toeic", "toefl"].includes(vocabKind(track))) continue;
+    for (const item of track.items || []) {
+      if (normalizeStudyTerm(item.primary) === normalized) entries.push({ trackId: track.id, itemId: item.id });
+    }
+  }
+  return entries.length ? entries : [{ trackId, itemId }];
+}
+
+function setCheckedForMatchingVocabulary(trackId, itemId, checked) {
+  for (const entry of matchingVocabularyEntries(trackId, itemId)) {
+    const progress = ensureTrackProgress(entry.trackId);
+    if (checked) uniquePush(progress.checked, entry.itemId);
+    else removeValue(progress.checked, entry.itemId);
+  }
+}
+function synchronizeCheckedVocabularyDecks() {
+  const entriesByTerm = new Map();
+  for (const track of state.tracks) {
+    if (!["toeic", "toefl"].includes(vocabKind(track))) continue;
+    for (const item of track.items || []) {
+      const normalized = normalizeStudyTerm(item.primary);
+      if (!normalized) continue;
+      if (!entriesByTerm.has(normalized)) entriesByTerm.set(normalized, []);
+      entriesByTerm.get(normalized).push({ trackId: track.id, itemId: item.id });
+    }
+  }
+
+  let changed = 0;
+  let matchedTerms = 0;
+  for (const entries of entriesByTerm.values()) {
+    if (entries.length < 2) continue;
+    const isChecked = entries.some((entry) => ensureTrackProgress(entry.trackId).checked.includes(entry.itemId));
+    if (!isChecked) continue;
+    matchedTerms += 1;
+    for (const entry of entries) {
+      const progress = ensureTrackProgress(entry.trackId);
+      if (!progress.checked.includes(entry.itemId)) {
+        progress.checked.push(entry.itemId);
+        changed += 1;
+      }
+    }
+  }
+  saveProgress();
+  return { changed, matchedTerms };
+}
 function groupLabel(group) {
   return { all: "\uC804\uCCB4", word: "\uB2E8\uC5B4", toeic: "\uD1A0\uC775", toefl: "\uD1A0\uD50C", grammar: "\uBB38\uBC95", script: "\uBB38\uC7A5" }[group] || group;
 }
@@ -782,7 +844,7 @@ function markItem(kind) {
   }
   if (kind === "checked") {
     const wasChecked = progress.checked.includes(item.id);
-    wasChecked ? removeValue(progress.checked, item.id) : uniquePush(progress.checked, item.id);
+    setCheckedForMatchingVocabulary(track.id, item.id, !wasChecked);
     saveProgress();
     if (!wasChecked && state.settings?.checkAsKnown && state.route === "study") {
       markItem("known");
@@ -802,7 +864,8 @@ function toggleItemFlag(trackId, itemId, kind) {
     progress.saved.includes(itemId) ? removeValue(progress.saved, itemId) : uniquePush(progress.saved, itemId);
   }
   if (kind === "checked") {
-    progress.checked.includes(itemId) ? removeValue(progress.checked, itemId) : uniquePush(progress.checked, itemId);
+    const wasChecked = progress.checked.includes(itemId);
+    setCheckedForMatchingVocabulary(trackId, itemId, !wasChecked);
   }
   saveProgress();
 }
@@ -1129,6 +1192,13 @@ function renderSettingsModal() {
           <section class="settings-row settings-row--remote">
             <strong>\uBE14\uB8E8\uD22C\uC2A4 \uB9AC\uBAA8\uCEE8</strong>
             <span>8BitDo \uAE30\uC900: A \uC54C\uACE0\uC788\uC74C / B \uB73B \uBCF4\uAE30 / X \uACF5\uBD80\uD558\uACA0\uC74C / Y \uCCB4\uD06C / L1 \uC774\uC804 / R1 \uC800\uC7A5 / L2 \uB2E4\uC74C / R2 \uCCB4\uD06C</span>
+          </section>
+          <section class="settings-row settings-row--sync">
+            <div>
+              <strong>\uB2E8\uC5B4 \uCCB4\uD06C\uC0C1\uD0DC \uC591 \uB371 \uB3D9\uAE30\uD654</strong>
+              <span>\uD1A0\uC775\uACFC \uD1A0\uD50C\uC5D0 \uAC19\uC740 \uB2E8\uC5B4\uAC00 \uC788\uC73C\uBA74 \uCCB4\uD06C \uC0C1\uD0DC\uB97C \uC591\uCABD\uC5D0 \uB9DE\uCD94\uAE30</span>
+            </div>
+            <button class="home-utility-button" type="button" data-action="settings-sync-checked">\uB3D9\uAE30\uD654</button>
           </section>
         </div>
       </div>
@@ -1927,7 +1997,7 @@ function renderCustomSelect() {
                   <div class="custom-select-track${trackCollapsed ? " is-collapsed" : ""}">
                     <div class="custom-select-track__head">
                       <label class="custom-track-check" data-custom-track-select="${escapeHtml(track.trackKey)}">
-                        <input type="checkbox" data-custom-track-select="${escapeHtml(track.trackKey)}" ${selectedCount === track.options.length ? "checked" : ""} aria-label="${escapeHtml(track.trackTitle)} ÀüÃ¼ ¼±ÅÃ">
+                        <input type="checkbox" data-custom-track-select="${escapeHtml(track.trackKey)}" ${selectedCount === track.options.length ? "checked" : ""} aria-label="${escapeHtml(track.trackTitle)} ì „ì²´ ì„ íƒ">
                         <span>${escapeHtml(track.trackTitle)}</span>
                       </label>
                       <button class="custom-select-track__toggle" type="button" data-custom-collapse="track:${escapeHtml(track.trackKey)}" aria-expanded="${trackCollapsed ? "false" : "true"}">
@@ -2151,6 +2221,11 @@ function bindEvents() {
     }
     if (action === "settings-close") {
       state.settingsOpen = false;
+      render();
+      return;
+    }
+    if (action === "settings-sync-checked") {
+      synchronizeCheckedVocabularyDecks();
       render();
       return;
     }

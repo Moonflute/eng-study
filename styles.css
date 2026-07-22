@@ -3604,3 +3604,6 @@ button {
   line-height: 1.4;
   word-break: keep-all;
 }
+.settings-row--sync {
+  align-items: center;
+}
