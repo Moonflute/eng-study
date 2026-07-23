@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.58";
+const APP_VERSION = "0.0.59";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -693,17 +693,12 @@ function studyEstimateSummary() {
   if (!estimate) return { remainingClicks: 0, remainingMs: 0 };
   const completedCards = Math.max(0, Number(estimate.completedCards || 0));
   const totalCards = Math.max(completedCards, Number(estimate.totalCards || 0));
-  const averageClicks = completedCards
-    ? Number(estimate.totalCompletionClicks || 0) / completedCards
-    : 2;
+  const attemptedCards = Object.keys(estimate.clickCountByKey || {}).length;
+  const averageClicks = Math.max(2, attemptedCards ? Number(estimate.totalClicks || 0) / attemptedCards : 2);
   const averageClickMs = estimate.decisionCount
     ? Math.max(500, Number(estimate.totalDecisionMs || 0) / estimate.decisionCount)
     : 5000;
-  const unfinishedClicks = Object.entries(estimate.clickCountByKey || {})
-    .filter(([key]) => !estimate.completedKeys?.[key])
-    .reduce((sum, [, count]) => sum + Number(count || 0), 0);
-  const expectedTotalClicks = averageClicks * Math.max(0, totalCards - completedCards);
-  const remainingClicks = Math.max(0, Math.ceil(expectedTotalClicks - unfinishedClicks));
+  const remainingClicks = Math.max(0, Math.ceil(averageClicks * Math.max(0, totalCards - completedCards)));
   return { remainingClicks, remainingMs: Math.max(0, Math.ceil(remainingClicks * averageClickMs)) };
 }
 
