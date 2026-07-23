@@ -1,4 +1,4 @@
-const APP_VERSION = "0.0.57";
+const APP_VERSION = "0.0.58";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
@@ -1280,7 +1280,7 @@ function renderSettingsModal() {
               <span>\uD0C0\uC774\uBA38\uC640 \uC608\uC0C1\uCE58\uB294 \uD558\uB098\uB9CC \uD45C\uC2DC</span>
             </div>
             <select class="settings-select" data-setting-select="studyHeaderMode">
-              <option value="none" ${settings.studyHeaderMode === "none" ? "selected" : ""}>\uB048</option>
+              <option value="none" ${settings.studyHeaderMode === "none" ? "selected" : ""}>\uBBF8\uD45C\uC2DC</option>
               <option value="timer" ${settings.studyHeaderMode === "timer" ? "selected" : ""}>\uD0C0\uC774\uBA38</option>
               <option value="estimate" ${settings.studyHeaderMode === "estimate" ? "selected" : ""}>\uC608\uC0C1\uCE58</option>
             </select>
