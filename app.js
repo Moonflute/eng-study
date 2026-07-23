@@ -1,10 +1,10 @@
-const APP_VERSION = "0.0.56";
+const APP_VERSION = "0.0.57";
 const STORAGE_KEY = "english-study-lab-progress-v0";
 const SCRIPT_STORAGE_KEY = "english-study-lab-script-v0";
 const MODE_PROGRESS_STORAGE_KEY = "english-study-lab-mode-progress-v0";
 const SETTINGS_STORAGE_KEY = "english-study-lab-settings-v0";
 const SOURCE_URL = "./data/english-source.json";
-const DEFAULT_SETTINGS = { batchSize: 7, checkAsKnown: false, timerEnabled: false, timerSeconds: 10, timerTheme: "number" };
+const DEFAULT_SETTINGS = { batchSize: 7, checkAsKnown: false, studyHeaderMode: "none", timerEnabled: false, timerSeconds: 10, timerTheme: "number" };
 
 const app = document.querySelector("#app");
 let transientNoticeTimer = null;
@@ -56,6 +56,7 @@ const state = {
   progressOpen: false,
   savedListOpen: false,
   stagePreviewIndex: null,
+  studyEstimate: null,
 };
 
 function defaultScriptText() {
@@ -72,6 +73,8 @@ function loadSettings() {
     return {
       ...DEFAULT_SETTINGS,
       ...saved,
+      studyHeaderMode: ["none", "timer", "estimate"].includes(saved.studyHeaderMode) ? saved.studyHeaderMode : (saved.timerEnabled ? "timer" : "none"),
+      timerEnabled: saved.studyHeaderMode ? saved.studyHeaderMode === "timer" : Boolean(saved.timerEnabled),
       batchSize: [0, 7, 20].includes(Number(saved.batchSize)) ? Number(saved.batchSize) : DEFAULT_SETTINGS.batchSize,
       timerSeconds: Math.max(3, Math.min(300, Number(saved.timerSeconds || DEFAULT_SETTINGS.timerSeconds))),
       timerTheme: ["number", "circle"].includes(saved.timerTheme) ? saved.timerTheme : DEFAULT_SETTINGS.timerTheme,
@@ -331,6 +334,7 @@ function routeSnapshot() {
     savedListOpen: state.savedListOpen,
     stagePreviewIndex: state.stagePreviewIndex,
     settingsOpen: state.settingsOpen,
+    studyEstimate: state.studyEstimate,
   };
 }
 
@@ -375,6 +379,7 @@ function applyRouteSnapshot(snapshot) {
   state.savedListOpen = Boolean(next.savedListOpen);
   state.stagePreviewIndex = Number.isFinite(Number(next.stagePreviewIndex)) ? Number(next.stagePreviewIndex) : null;
   state.settingsOpen = Boolean(next.settingsOpen);
+  state.studyEstimate = next.studyEstimate && typeof next.studyEstimate === "object" ? next.studyEstimate : (state.customStudySession?.estimate || null);
   resetCardReveal();
   state.scriptRevealed = false;
   render();
@@ -422,6 +427,7 @@ function endPausedSelectedStudy() {
   render();
 }
 function parentRouteForCurrentState() {
+  state.studyEstimate = state.customStudySession?.estimate || createStudyEstimate(queue);
   if (state.completionPromptOpen || state.progressOpen || state.savedListOpen || state.settingsOpen || state.stagePreviewIndex !== null) return state.route;
   if (state.route === "study") return Array.isArray(state.studyQueue) ? "custom" : "track";
   if (state.route === "track") return "library";
@@ -452,6 +458,7 @@ function goParentRoute(options = {}) {
     state.queueIndex = 0;
     state.customStudySession = null;
     state.deckStudySession = null;
+    state.studyEstimate = null;
     clearTransientNotice();
   }
   setRoute(parentRoute, options);
@@ -474,6 +481,7 @@ function setRoute(route, options = {}) {
     state.queueIndex = 0;
     state.customStudySession = null;
     state.deckStudySession = null;
+    state.studyEstimate = null;
     clearTransientNotice();
   }
   state.route = route;
@@ -499,6 +507,7 @@ function selectTrack(trackId) {
   state.studyTitle = "";
   state.customStudySession = null;
   state.deckStudySession = null;
+  state.studyEstimate = null;
   state.transientNotice = "";
   state.completionPromptOpen = false;
   state.trackId = trackId;
@@ -524,6 +533,7 @@ function startStage(index) {
   selectStage(index);
   const track = currentTrack();
   state.deckStudySession = track ? { trackId: track.id, stageIndex: index, statusMap: {} } : null;
+  state.studyEstimate = track ? createStudyEstimate(track.items.slice(track.stages[index].start, track.stages[index].end)) : null;
   resetCardTimer();
   setRoute("study");
 }
@@ -626,6 +636,92 @@ function resetCardTimer() {
   state.cardTimerPaused = false;
 }
 
+function studyHeaderMode() {
+  const mode = state.settings?.studyHeaderMode;
+  if (["none", "timer", "estimate"].includes(mode)) return mode;
+  return state.settings?.timerEnabled ? "timer" : "none";
+}
+
+function isTimerDisplayEnabled() {
+  return studyHeaderMode() === "timer";
+}
+
+function isEstimateDisplayEnabled() {
+  return studyHeaderMode() === "estimate";
+}
+
+function createStudyEstimate(entries) {
+  return {
+    totalCards: Math.max(0, entries?.length || 0),
+    completedKeys: {},
+    clickCountByKey: {},
+    totalClicks: 0,
+    completedCards: 0,
+    totalCompletionClicks: 0,
+    totalDecisionMs: 0,
+    decisionCount: 0,
+    lastActionAt: Date.now(),
+  };
+}
+
+function currentStudyEstimateKey(track = currentTrack(), item = currentItem()) {
+  if (!track || !item) return "";
+  if (Array.isArray(state.studyQueue)) return queueEntryKey({ trackId: track.id, itemId: item.id });
+  return item.id;
+}
+
+function recordStudyDecision(kind, track = currentTrack(), item = currentItem()) {
+  const estimate = state.studyEstimate;
+  const key = currentStudyEstimateKey(track, item);
+  if (!estimate || !key || !["known", "again"].includes(kind)) return;
+  const now = Date.now();
+  const previous = Number(estimate.lastActionAt || now);
+  estimate.totalDecisionMs += Math.max(0, now - previous);
+  estimate.decisionCount += 1;
+  estimate.totalClicks += 1;
+  estimate.clickCountByKey[key] = Number(estimate.clickCountByKey[key] || 0) + 1;
+  if (kind === "known" && !estimate.completedKeys[key]) {
+    estimate.completedKeys[key] = true;
+    estimate.completedCards += 1;
+    estimate.totalCompletionClicks += estimate.clickCountByKey[key];
+  }
+  estimate.lastActionAt = now;
+}
+
+function studyEstimateSummary() {
+  const estimate = state.studyEstimate;
+  if (!estimate) return { remainingClicks: 0, remainingMs: 0 };
+  const completedCards = Math.max(0, Number(estimate.completedCards || 0));
+  const totalCards = Math.max(completedCards, Number(estimate.totalCards || 0));
+  const averageClicks = completedCards
+    ? Number(estimate.totalCompletionClicks || 0) / completedCards
+    : 2;
+  const averageClickMs = estimate.decisionCount
+    ? Math.max(500, Number(estimate.totalDecisionMs || 0) / estimate.decisionCount)
+    : 5000;
+  const unfinishedClicks = Object.entries(estimate.clickCountByKey || {})
+    .filter(([key]) => !estimate.completedKeys?.[key])
+    .reduce((sum, [, count]) => sum + Number(count || 0), 0);
+  const expectedTotalClicks = averageClicks * Math.max(0, totalCards - completedCards);
+  const remainingClicks = Math.max(0, Math.ceil(expectedTotalClicks - unfinishedClicks));
+  return { remainingClicks, remainingMs: Math.max(0, Math.ceil(remainingClicks * averageClickMs)) };
+}
+
+function formatEstimatedTime(milliseconds) {
+  const seconds = Math.max(0, Math.ceil(Number(milliseconds || 0) / 1000));
+  if (seconds < 60) return String(seconds) + "\uCD08";
+  return String(Math.ceil(seconds / 60)) + "\uBD84";
+}
+
+function renderStudyEstimate() {
+  if (!isEstimateDisplayEnabled()) return "";
+  const summary = studyEstimateSummary();
+  return '<div class="study-estimate" aria-label="\uB0A8\uC740 \uC608\uC0C1 \uD559\uC2B5\uB7C9"><span class="study-estimate__time">\uC57D ' + formatEstimatedTime(summary.remainingMs) + '</span><span class="study-estimate__clicks">' + summary.remainingClicks + '\uD68C</span></div>';
+}
+
+function renderStudyHeaderDisplay() {
+  return isTimerDisplayEnabled() ? renderStudyTimer() : renderStudyEstimate();
+}
 function timerDurationMs() {
   return Math.max(3, Number(state.settings?.timerSeconds || DEFAULT_SETTINGS.timerSeconds)) * 1000;
 }
@@ -644,7 +740,7 @@ function timerRemainingSeconds() {
 
 function startStudyTimer() {
   stopStudyTimer();
-  if (state.route !== "study" || !state.settings?.timerEnabled || state.completionPromptOpen) return;
+  if (state.route !== "study" || !isTimerDisplayEnabled() || state.completionPromptOpen) return;
   state.cardTimerRemainingMs = timerDurationMs();
   state.cardTimerPaused = false;
   state.cardTimerStartedAt = Date.now();
@@ -652,7 +748,7 @@ function startStudyTimer() {
 }
 
 function ensureStudyTimer() {
-  if (state.route !== "study" || !state.settings?.timerEnabled || state.completionPromptOpen) {
+  if (state.route !== "study" || !isTimerDisplayEnabled() || state.completionPromptOpen) {
     stopStudyTimer();
     return;
   }
@@ -680,7 +776,7 @@ function tickStudyTimer(allowExpire = true) {
 }
 
 function toggleStudyTimerPause() {
-  if (state.route !== "study" || !state.settings?.timerEnabled) return;
+  if (state.route !== "study" || !isTimerDisplayEnabled()) return;
   if (state.cardTimerPaused) {
     state.cardTimerPaused = false;
     state.cardTimerStartedAt = Date.now();
@@ -785,6 +881,7 @@ function confirmCompletionPrompt() {
   state.customStudySession = null;
   clearSelectedStudySession();
   state.deckStudySession = null;
+  state.studyEstimate = null;
   clearTransientNotice();
   setRoute(destination);
 }
@@ -827,6 +924,7 @@ function markItem(kind) {
     state.customStudySession.lastAgainEntryKey = queueEntryKey({ trackId: track.id, itemId: item.id });
   }
   if (kind === "known" || kind === "again") {
+    recordStudyDecision(kind, track, item);
     if (state.customStudySession?.mode === "selected") {
       const entryKey = queueEntryKey({ trackId: track.id, itemId: item.id });
       state.customStudySession.statusMap ??= {};
@@ -1018,6 +1116,8 @@ function queueFromStageOptions(options) {
 function startQueue(entries, title, customStudySession = null) {
   if (!entries.length) return;
   state.customStudySession = customStudySession;
+  state.studyEstimate = customStudySession?.estimate || createStudyEstimate(entries);
+  if (customStudySession) customStudySession.estimate = state.studyEstimate;
   clearTransientNotice();
   state.studyQueue = entries;
   state.queueIndex = 0;
@@ -1078,6 +1178,7 @@ function startSelectedStudy() {
     statusMap: {},
     pending: shuffleEntries(sourceEntries),
     review: [],
+    estimate: createStudyEstimate(sourceEntries),
   };
   const entries = takeNextCustomBatch(session);
   state.customStudySession = session;
@@ -1173,13 +1274,24 @@ function renderSettingsModal() {
             </div>
             <input type="checkbox" ${settings.checkAsKnown ? "checked" : ""} data-setting-toggle="checkAsKnown">
           </label>
+          <section class="settings-row settings-row--display-mode">
+            <div>
+              <strong>\uD559\uC2B5 \uC0C1\uB2E8 \uD45C\uC2DC</strong>
+              <span>\uD0C0\uC774\uBA38\uC640 \uC608\uC0C1\uCE58\uB294 \uD558\uB098\uB9CC \uD45C\uC2DC</span>
+            </div>
+            <select class="settings-select" data-setting-select="studyHeaderMode">
+              <option value="none" ${settings.studyHeaderMode === "none" ? "selected" : ""}>\uB048</option>
+              <option value="timer" ${settings.studyHeaderMode === "timer" ? "selected" : ""}>\uD0C0\uC774\uBA38</option>
+              <option value="estimate" ${settings.studyHeaderMode === "estimate" ? "selected" : ""}>\uC608\uC0C1\uCE58</option>
+            </select>
+          </section>
           <section class="settings-row settings-row--timer${settings.timerEnabled ? "" : " is-disabled"}">
             <div class="settings-row-main">
               <div>
                 <strong>\uD0C0\uC774\uBA38</strong>
                 <span>\uC2DC\uAC04\uC774 \uC9C0\uB098\uBA74 \uACF5\uBD80\uD558\uACA0\uC74C\uC73C\uB85C \uCC98\uB9AC</span>
               </div>
-              <input type="checkbox" ${settings.timerEnabled ? "checked" : ""} data-setting-toggle="timerEnabled">
+              <span class="settings-mode-caption">\uC0C1\uB2E8 \uD45C\uC2DC\uC5D0\uC11C \uD0C0\uC774\uBA38 \uC120\uD0DD \uC2DC \uC0AC\uC6A9</span>
             </div>
             <div class="settings-timer-controls">
               <label>\uCD08 <input class="settings-number" type="number" min="3" max="300" value="${escapeHtml(settings.timerSeconds)}" data-setting-number="timerSeconds" ${settings.timerEnabled ? "" : "disabled"}></label>
@@ -1660,7 +1772,7 @@ function studyProgressText(itemNumber, batchTotal) {
 }
 
 function renderStudyTimer() {
-  if (!state.settings?.timerEnabled) return "";
+  if (!isTimerDisplayEnabled()) return "";
   const remaining = timerRemainingSeconds();
   const theme = state.settings.timerTheme || "number";
   return `<button class="study-timer study-timer--${escapeHtml(theme)}${state.cardTimerPaused ? " is-paused" : ""}" type="button" data-action="timer-toggle" aria-label="${state.cardTimerPaused ? "\uD0C0\uC774\uBA38 \uC7AC\uAC1C" : "\uD0C0\uC774\uBA38 \uC77C\uC2DC\uC815\uC9C0"}"><span data-study-timer-value>${remaining}</span></button>`;
@@ -1675,6 +1787,7 @@ function renderStudy() {
   const isQueue = Array.isArray(state.studyQueue);
   const stage = currentStage(track);
   const items = currentItems(track, stage);
+  if (!state.studyEstimate) { state.studyEstimate = state.customStudySession?.estimate || createStudyEstimate(items); }
   const item = currentItem();
   const progress = ensureTrackProgress(track.id);
   const itemNumber = isQueue ? Math.min(state.queueIndex + 1, items.length) : Math.min(state.cardIndex + 1, items.length);
@@ -1698,7 +1811,7 @@ function renderStudy() {
             <h1 class="page-title page-title--study">${title}</h1>
             <div class="study-progress">${progressText}</div>
           </div>
-          <div class="study-head-right">${renderStudyTimer()}</div>
+          <div class="study-head-right">${renderStudyHeaderDisplay()}</div>
         </div>
         <div class="study-summary-row">
           <div class="study-summary-stats">
@@ -2347,6 +2460,10 @@ function bindEvents() {
     }
     if (target.dataset.settingSelect) {
       state.settings[target.dataset.settingSelect] = target.value;
+      if (target.dataset.settingSelect === "studyHeaderMode") {
+        state.settings.timerEnabled = target.value === "timer";
+        resetCardTimer();
+      }
       saveSettings();
       render();
       return;

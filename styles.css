@@ -3607,3 +3607,42 @@ button {
 .settings-row--sync {
   align-items: center;
 }
+.settings-row--display-mode {
+  align-items: center;
+}
+
+.settings-row--display-mode .settings-select {
+  width: 104px;
+}
+
+.settings-mode-caption {
+  margin-top: 0 !important;
+  color: var(--muted);
+  font-size: 11px !important;
+  white-space: nowrap;
+}
+
+.study-estimate {
+  display: grid;
+  min-width: 100px;
+  gap: 2px;
+  justify-items: end;
+  color: var(--brand);
+  font-weight: 950;
+  line-height: 1.05;
+}
+
+.study-estimate__time {
+  font-size: 18px;
+}
+
+.study-estimate__clicks {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 420px) {
+  .settings-row--display-mode {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
